@@ -1,0 +1,12 @@
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+.env
+.DS_Store
+output/
+*.pdf
+*.csv
