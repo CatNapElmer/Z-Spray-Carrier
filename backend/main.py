@@ -56,18 +56,18 @@ def get_structural_checks(params: ProjectParameters):
 @app.post("/api/optimizer")
 def get_stock_optimization(params: ProjectParameters):
     assembly = generate_fabrication_assembly(params)
-    cut_list = assembly["cut_list"]
-    return optimize_stock(cut_list, params.available_stock_lengths, params.saw_kerf)
+    return optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
 
 @app.post("/api/export")
 def export_package(params: ProjectParameters):
     assembly = generate_fabrication_assembly(params)
     bom = assembly["bom"]
     cut_list = assembly["cut_list"]
-    stock_data = optimize_stock(cut_list, params.available_stock_lengths, params.saw_kerf)
+    stock_data = optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
     provenance = get_project_provenance(params)
     
-    output_dir = "output/Z-Spray-Carrier-Fabrication-Package"
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    output_dir = os.path.join(project_root, "output", "Z-Spray-Carrier-Fabrication-Package")
     os.makedirs(output_dir, exist_ok=True)
     
     # 1. Full Multi-Sheet Shop Drawings (S1 through S9)
@@ -120,7 +120,7 @@ def export_package(params: ProjectParameters):
     with open(cut_list_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["piece_mark", "section", "cut_length", "quantity", "cut_type", "cut_angle_left", "cut_angle_right", "notes"]
+            fieldnames=["piece_mark", "section", "grade", "cut_length", "quantity", "cut_type", "cut_angle_left", "cut_angle_right", "notes"]
         )
         writer.writeheader()
         writer.writerows(cut_list)
@@ -130,7 +130,7 @@ def export_package(params: ProjectParameters):
     with open(purch_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["section", "grade", "stick_length", "quantity", "total_purchased_length", "total_purchased_weight"]
+            fieldnames=["category", "section", "grade", "stick_length", "quantity", "unit_size", "total_purchased_length", "total_purchased_weight", "notes"]
         )
         writer.writeheader()
         writer.writerows(stock_data["purchase_list"])
@@ -143,16 +143,25 @@ def export_package(params: ProjectParameters):
         f.write("Z SPRAY CARRIER FABRICATION PACKAGE - README FOR STEEL FITTER / FABRICATOR\n")
         f.write("================================================================================\n\n")
         f.write("PROJECT: 2026 Z Turf Equipment Z-Spray Junior (Model ZSX3624) Carrier\n")
-        f.write("MOUNT:   2015 Ford F-350 Flatbed Truck Twin Receiver Hitch (38.00\" C-C Spacing)\n")
+        f.write("MOUNT:   2015 Ford F-350 Flatbed Truck Twin Receiver Hitch\n")
         f.write("UNITS:   INCHES (USCS) - Dimensions govern over graphical scaling.\n\n")
         f.write("PACKAGE CONTENTS:\n")
         f.write("  1. Z-Spray-Carrier-Shop-Drawings.pdf  - 9-Sheet Vector PDF Shop Drawing Set\n")
         f.write("  2. BOM.csv                           - Bill of Materials with weights and grades\n")
         f.write("  3. Cut-List.csv                      - Fabrication shop cut list with angles and marks\n")
-        f.write("  4. Purchase-List.csv                 - Raw steel purchasing schedule (sticks to order)\n")
+        f.write("  4. Purchase-List.csv                 - Comprehensive steel, plate, grating & hardware schedule\n")
         f.write("  5. Stock-Cutting-Plan.pdf            - 1D linear nesting layout diagram by stick\n")
         f.write("  6. Project-Parameters.pdf            - Full engineering parameter and provenance list\n")
         f.write("  7. README-FOR-FABRICATOR.txt         - This verification and layout guidance document\n\n")
+        f.write("--------------------------------------------------------------------------------\n")
+        f.write("STRUCTURAL STATUS ADVISORY: [FAIL - UNASSISTED CANTILEVER]\n")
+        f.write("--------------------------------------------------------------------------------\n")
+        f.write("Under 2.0g dynamic vertical shock (1,465 lb suspended payload), cantilever bending stress\n")
+        f.write("in dual 2x2x1/4 A500 Gr B stingers reaches 66,210 psi (yield strength = 46,000 psi).\n")
+        f.write("FACTOR OF SAFETY = 0.69 (Target FOS = 2.00) -> STATUS: FAIL.\n")
+        f.write("MANDATORY REINFORCEMENT: Install twin diagonal tubular struts from carrier rails at X=38\"\n")
+        f.write("up to truck flatbed headache rack / subframe tie-down anchors (FOS > 3.0), or add an underframe\n")
+        f.write("king-post truss before highway transport under load.\n\n")
         f.write("--------------------------------------------------------------------------------\n")
         f.write("CRITICAL UNVERIFIED FIELD DIMENSIONS - MUST CONFIRM BEFORE CUTTING STEEL:\n")
         f.write("--------------------------------------------------------------------------------\n")
@@ -164,18 +173,23 @@ def export_package(params: ProjectParameters):
         f.write("--------------------------------------------------------------------------------\n")
         f.write("KEY FABRICATION CONVENTIONS & DATUMS:\n")
         f.write("--------------------------------------------------------------------------------\n")
-        f.write("- FRONT DATUM (X = 0.00\"): Established at the front face of front crossmember C1.\n")
+        f.write("- FRONT DATUM (X = 0.00\"): Established at front face of front crossmember C1.\n")
         f.write("  Measure all longitudinal crossmembers directly from this front datum.\n")
         f.write("- HINGE CENTERLINE (X = 63.00\"): Centerline of the single rigid ramp pivot pin.\n")
         f.write("- RUNNING DECK ELEVATION (Z = 0.00\"): Target running surface is 17.0\" above ground.\n")
-        f.write("- OVERALL CARRIER WIDTH: 38.00\" outside-to-outside of outer longitudinal tubes M1.\n")
-        f.write("- TWIN MOUNT STINGERS: Spaced exactly 38.00\" center-to-center to match F-350 receivers.\n")
+        f.write("- BASE FRAME WIDTH: 36.00\" outside-to-outside of outer longitudinal tubes M1.\n")
+        f.write("- MAXIMUM OVERALL WIDTH: 38.00\" across flared guide tips (HARD CONSTRAINT <= 38.00\").\n")
+        f.write("- WHEEL TRACKS: 11.50\" flat width per side; 13.00\" clear center cleanout opening.\n")
+        f.write("- TWIN MOUNT STINGERS: Spaced 37.50\" center-to-center (UNVERIFIED: 40.0\" span - 2.5\" OD).\n")
+        f.write("- STINGER OVERLAP: 20.00\" underframe overlap passing under C1 (X=1\") and C2 (X=18\").\n")
+        f.write("- HINGE CLEARANCE: 1-1/8\" OD x 0.172\" wall DOM tubing (0.781\" ID) provides intentional\n")
+        f.write("  0.031\" (1/32\") clearance over 0.750\" pin to prevent binding under outdoor corrosion.\n")
         f.write("- WELD REQUIREMENTS: Structural tubes welded with 3/16\" fillet all around. Gussets 1/4\" fillet.\n")
         f.write("- RAMP: ONE rigid 61.00\" assembly. No intermediate folding joint.\n\n")
         f.write("================================================================================\n")
         
     # 8. Zip archive of complete fabrication package
-    zip_path = "output/Z-Spray-Carrier-Fabrication-Package.zip"
+    zip_path = os.path.join(project_root, "output", "Z-Spray-Carrier-Fabrication-Package.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, _, files in os.walk(output_dir):
             for file in files:

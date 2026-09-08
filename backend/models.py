@@ -19,32 +19,37 @@ class ParameterItem(BaseModel):
     required_before_fabrication: bool = False
 
 class ProjectParameters(BaseModel):
-    # Carrier Geometry
-    carrier_width: float = 38.00               # MEASURED: Outside frame width (in)
+    # Carrier Maximum Envelope & Base Geometry
+    carrier_max_overall_width: float = 38.00  # HARD REQUIREMENT: Max outside width of completed carrier including flare tips (in)
+    carrier_width: float = 36.00              # Frame outside width (in) = carrier_max_overall_width - 2 * flare_width
     carrier_deck_length: float = 63.00        # MEASURED: Front stop to ramp hinge CL (in)
-    deck_height: float = 17.00                # DESIGN/MEASURED: Target deck height above ground (in)
+    deck_height: float = 17.00                # DESIGN/MEASURED: Target running deck height above ground (in)
     
     # Wheel Track Geometry
-    track_flat_width: float = 12.00           # DESIGN: Width of each wheel track (in)
-    track_outer_spacing: float = 38.00        # CALCULATED/DESIGN: Outside-to-outside of tracks (in)
-    track_center_gap: float = 14.00           # CALCULATED: Clear opening between tracks (in)
+    track_flat_width: float = 11.50           # DESIGN: Width of each flat wheel track (in)
+    track_outer_spacing: float = 36.00        # CALCULATED: Outside-to-outside of track frame (in)
+    track_center_gap: float = 13.00           # CALCULATED: Clear cleanout opening between tracks (in)
     flared_guide_height: float = 3.00         # DESIGN: Vertical guide height (in)
     flare_angle: float = 45.0                 # DESIGN: Outward flare angle (degrees)
-    flare_width: float = 1.50                 # DESIGN: Flare horizontal projection (in)
+    flare_width: float = 1.00                 # DESIGN: Flare horizontal projection per side (in) (36.0 + 2*1.0 = 38.00" MAX)
     
     # Ramp Geometry (One rigid hinged assembly)
     ramp_length: float = 61.00                # MEASURED: Hinge CL to tip (in)
     ramp_clearance: float = 1.00              # DESIGN: Nominal clearance behind rear tires to ramp (in)
-    ramp_hinge_pin_dia: float = 0.75          # DESIGN: Hinge pin diameter (in)
-    ramp_hinge_sleeve_wall: float = 0.188     # DESIGN: Hinge sleeve wall thickness (in)
+    ramp_hinge_pin_dia: float = 0.750         # DESIGN: Hinge pin diameter (in)
+    ramp_hinge_sleeve_od: float = 1.125       # DESIGN: 1-1/8" DOM sleeve OD (in)
+    ramp_hinge_sleeve_id: float = 0.781       # DESIGN: 25/32" DOM sleeve ID (0.031" diametral clearance over 3/4" pin) (in)
+    ramp_hinge_sleeve_wall: float = 0.172     # DESIGN: 0.172" DOM wall thickness (in)
     
     # Truck Interface
-    receiver_spacing: float = 38.00           # MEASURED: Center-to-center span (in)
-    receiver_outside_span: float = 40.00      # MEASURED: Outside-to-outside span (in)
-    receiver_tube_width: float = 2.00         # MEASURED: Outside width of receiver tube (in)
+    receiver_clear_opening: float = 2.00      # DESIGN: Clear inside opening of receiver socket (in)
+    receiver_socket_outside_width: float = 2.50 # ESTIMATED_UNVERIFIED: Outside width of truck receiver socket (in)
+    receiver_outside_span: float = 40.00      # MEASURED: Truck receiver tubes outside-to-outside span (in)
+    receiver_spacing: float = 37.50           # ESTIMATED_UNVERIFIED: Receiver c-c spacing (40.0 - socket OD) (in)
+    receiver_tube_width: float = 2.00         # Stinger tube dimension (2.00" square tube) (in)
     stinger_section: str = "2x2x1/4 Tube"      # DESIGN: Structural tube for stingers
     stinger_insertion_length: float = 18.00   # ESTIMATED_UNVERIFIED: Penetration into truck receiver (in)
-    stinger_overlap_length: float = 14.00     # DESIGN: Welded underframe overlap length (in)
+    stinger_overlap_length: float = 20.00     # DESIGN: Welded underframe overlap length (in) (extends past C2 at X=18")
     hitch_pin_hole_setback: float = 3.00      # ESTIMATED_UNVERIFIED: Pin hole from stinger tip (in)
     hitch_pin_hole_dia: float = 0.656         # DESIGN: 5/8" hitch pin hole diameter (+1/32" clearance) (in)
     truck_suspension_drop: float = 1.50       # ESTIMATED_UNVERIFIED: Anticipated squat under payload (in)
@@ -105,7 +110,7 @@ class Member(BaseModel):
     end_pt: Point3D
     orientation: str = "X" # X (longitudinal), Y (transverse), Z (vertical)
     assembly: str = "MAIN_CARRIER" # MAIN_CARRIER, RAMP, STINGER, DETAILS
-    cut_type: str = "SQUARE" # SQUARE, MITER_45, BEVEL
+    cut_type: str = "SQUARE" # SQUARE, ANGLE_CUT, BEVEL, MITER
     cut_angle_left: float = 0.0
     cut_angle_right: float = 0.0
     unit_weight: float # lb/ft
@@ -131,11 +136,13 @@ class Plate(BaseModel):
     status: StatusEnum = StatusEnum.DESIGN
 
 class HingeComponent(BaseModel):
-    pin_diameter: float = 0.75
+    pin_diameter: float = 0.750
     pin_length: float = 40.00
     sleeve_od: float = 1.125
     sleeve_id: float = 0.781
-    sleeve_lengths: List[float] = [3.0, 3.0, 3.0, 3.0]
+    sleeve_wall: float = 0.172
+    diametral_clearance: float = 0.031
+    sleeve_lengths: List[float] = [3.5, 3.5, 3.5, 3.5]
     pin_material: str = "AISI 1018 Cold Finished Round"
     sleeve_material: str = "ASTM A513 DOM Mechanical Tube"
     retaining_method: str = "Cross-drilled 3/16\" Hole for Linch Pin with 3/4\" Heavy Flat Washers"
@@ -151,7 +158,14 @@ class StructuralCheckResult(BaseModel):
     stinger_bending_stress_psi: float
     yield_strength_psi: float
     factor_of_safety: float
-    is_adequate: bool
+    target_safety_factor: float = 2.00
+    controlling_load_case: str = "VERTICAL"
+    controlling_stress_psi: float = 0.0
+    is_adequate: bool = False
+    status: str = "FAIL"
+    load_cases: Dict[str, Any] = {}
+    hinge_check: Optional[Dict[str, Any]] = None
+    reinforcement_recommendations: List[str] = []
     notes: List[str] = []
 
 class BomRow(BaseModel):
@@ -170,6 +184,7 @@ class BomRow(BaseModel):
 class CutListRow(BaseModel):
     piece_mark: str
     section: str
+    grade: str = "ASTM A500 Gr B"
     cut_length: float
     quantity: int
     cut_type: str = "SQUARE"
@@ -178,12 +193,15 @@ class CutListRow(BaseModel):
     notes: str = ""
 
 class PurchaseRow(BaseModel):
+    category: str = "LINEAR_STOCK" # LINEAR_STOCK, PLATE, GRATING, HARDWARE
     section: str
     grade: str
-    stick_length: float
-    quantity: int
-    total_purchased_length: float
-    total_purchased_weight: float
+    stick_length: float = 0.0
+    quantity: int = 1
+    total_purchased_length: float = 0.0
+    total_purchased_weight: float = 0.0
+    unit_size: str = ""
+    notes: str = ""
 
 class StockStick(BaseModel):
     stick_id: str

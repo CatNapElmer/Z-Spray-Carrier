@@ -30,22 +30,23 @@ def test_fraction_edge_cases_zero_and_negative():
     assert fraction_str(-0.75) == '-3/4"'
     assert fraction_str(0.00001) == '0"'
 
-# 3. 38-inch receiver center spacing
-def test_receiver_centerline_spacing_38in():
+# 3. 37.5-inch receiver center spacing (derived from 40.0 outside span - 2.5 socket OD)
+def test_receiver_centerline_spacing_37_5in():
     params = ProjectParameters()
-    assert params.receiver_spacing == 38.0
+    assert params.receiver_spacing == 37.50
     assembly = generate_fabrication_assembly(params)
     stinger_l = next(m for m in assembly["members"] if m.piece_mark == "S1-L")
     stinger_r = next(m for m in assembly["members"] if m.piece_mark == "S1-R")
-    assert abs(stinger_r.start_pt.y - stinger_l.start_pt.y) == 38.0
+    assert abs(stinger_r.start_pt.y - stinger_l.start_pt.y) == 37.50
 
-# 4. 40-inch receiver outside span derivation
+# 4. 40-inch receiver outside span and 37.5-inch spacing relationship
 def test_receiver_outside_span_derivation_40in():
     params = ProjectParameters()
-    # Span = spacing (38) + tube width (2) = 40.0
-    derived_outside = params.receiver_spacing + params.receiver_tube_width
-    assert derived_outside == 40.0
-    assert params.receiver_outside_span == 40.0
+    assert params.receiver_outside_span == 40.00
+    assert params.receiver_socket_outside_width == 2.50
+    derived_spacing = params.receiver_outside_span - params.receiver_socket_outside_width
+    assert derived_spacing == params.receiver_spacing
+    assert derived_spacing == 37.50
 
 # 5. deck length propagation
 def test_deck_length_propagation():
@@ -63,11 +64,14 @@ def test_ramp_length_propagation():
 
 # 7. track width/position propagation
 def test_track_geometry_propagation():
-    params = ProjectParameters(carrier_width=38.0, track_flat_width=12.0)
+    params = ProjectParameters()
     assembly = generate_fabrication_assembly(params)
     m2_l = next(m for m in assembly["members"] if m.piece_mark == "M2-L")
-    # Outer edge is at -19, inner track rail M2-L is at -7 -> span is 12
-    assert abs(-19.0 - m2_l.start_pt.y) == 12.0
+    # Outer frame datum is at Y = -18.00 (frame width 36.00"), inner track rail M2-L is at Y = -6.50 -> track flat width is 11.50"
+    assert abs(-18.00 - m2_l.start_pt.y) == 11.50
+    # Cleanout gap between inner track angles M2-L (-6.50") and M2-R (+6.50") is 13.00"
+    m2_r = next(m for m in assembly["members"] if m.piece_mark == "M2-R")
+    assert abs(m2_r.start_pt.y - m2_l.start_pt.y) == 13.00
 
 # 8. flare parameter propagation
 def test_flared_guide_parameter_propagation():
@@ -116,7 +120,8 @@ def test_section_identity_preservation():
         {"piece_mark": "S1", "section": "2x2x1/4 Tube", "cut_length": 36.0, "quantity": 1},
     ]
     opt = optimize_stock(cut_list, [240.0])
-    sections = [p["section"] for p in opt["purchase_list"]]
+    linear_purchases = [p for p in opt["purchase_list"] if p.get("category") == "LINEAR_STOCK"]
+    sections = [p["section"] for p in linear_purchases]
     assert "2x2x3/16 Tube" in sections
     assert "2x2x1/4 Tube" in sections
     assert len(sections) == 2 # Preserved separately, never merged!
@@ -336,14 +341,34 @@ def test_api_export_endpoint():
     assert res.status_code == 200
     assert res.headers["content-type"] in ["application/zip", "application/x-zip-compressed"]
 
-# 33. Structural load calculation check
+# 33. Structural load calculation check with multi-case analysis & honest FAIL status
 def test_structural_load_calculation():
     params = ProjectParameters()
-    res = calculate_structural_checks(params, carrier_dead_weight=260.0)
-    assert res.payload_weight > 1000.0 # ~1148 lb
-    assert res.dynamic_vertical_load > 2000.0
-    assert res.stinger_bending_stress_psi > 0.0
-    assert res.factor_of_safety > 0.0
+    res = calculate_structural_checks(params, carrier_dead_weight=317.0)
+    # Total suspended weight: ~1148 lb payload + ~317 lb carrier = ~1465 lb
+    assert res.payload_weight > 1140.0
+    assert res.total_suspended_weight > 1460.0
+    # 2.0g dynamic vertical shock: ~2930 lb
+    assert res.dynamic_vertical_load > 2900.0
+    # Cantilever bending stress ~66,210 psi on 2x2x1/4 A500 Gr B stingers (Fy = 46,000 psi)
+    assert res.stinger_bending_stress_psi > 60000.0
+    # FOS = 46000 / 66210 = 0.69 < 2.00 target
+    assert res.factor_of_safety < 1.0
+    assert res.factor_of_safety == pytest.approx(0.69, abs=0.05)
+    assert res.status == "FAIL"
+    assert res.is_adequate is False
+    assert res.controlling_load_case == "VERTICAL"
+    # All 4 load cases must be present
+    assert "VERTICAL" in res.load_cases
+    assert "BRAKING" in res.load_cases
+    assert "LATERAL" in res.load_cases
+    assert res.load_cases["VERTICAL"]["status"] == "FAIL"
+    # Hinge mechanical checks
+    assert res.hinge_check is not None
+    assert res.hinge_check["diametral_clearance_in"] == pytest.approx(0.031, abs=0.005)
+    assert res.hinge_check["clearance_status"] == "PASS"
+    assert res.hinge_check["pin_shear_status"] == "PASS"
+    assert res.hinge_check["ear_bearing_status"] == "PASS"
 
 # 34. Ramp deployment angle check
 def test_ramp_deployment_angle_calculation():
@@ -359,4 +384,70 @@ def test_api_seed_project():
     data = res.json()
     assert "parameters" in data
     assert "provenance" in data
-    assert data["parameters"]["carrier_width"] == 38.0
+    assert data["parameters"]["carrier_width"] == 36.0
+    assert data["parameters"]["carrier_max_overall_width"] == 38.0
+    assert data["parameters"]["receiver_spacing"] == 37.50
+
+# 36. 38.00" Maximum overall envelope constraint check
+def test_maximum_overall_envelope_38in():
+    params = ProjectParameters()
+    assert params.carrier_max_overall_width == 38.00
+    assert params.carrier_width == 36.00
+    assert params.flare_width == 1.00
+    # Overall width = frame width + 2 * flare projection = 36.0 + 2.0 = 38.00
+    overall_width = params.carrier_width + 2.0 * params.flare_width
+    assert overall_width <= 38.00
+    assert overall_width == 38.00
+    # Verify wheel track + cleanout gap matches frame width
+    # 2 * 11.50" track + 13.00" gap = 36.00" frame width
+    assert (2 * params.track_flat_width + params.track_center_gap) == params.carrier_width
+
+# 37. Stinger overlap extends past C2 (X=18.00") by 2.0"
+def test_stinger_overlap_length_and_c2_tie_in():
+    params = ProjectParameters()
+    assert params.stinger_overlap_length == 20.00
+    assembly = generate_fabrication_assembly(params)
+    s1_l = next(m for m in assembly["members"] if m.piece_mark == "S1-L")
+    c2 = next(m for m in assembly["members"] if m.piece_mark == "C2")
+    # Insertion length is 18.0", overlap is 20.0" -> total length 38.0"
+    assert s1_l.length == 38.00
+    assert s1_l.start_pt.x == -18.00
+    assert s1_l.end_pt.x == 20.00
+    # C2 is at X = 18.00 -> stinger passes under C2 by 2.00"
+    assert c2.start_pt.x == 18.00
+    assert s1_l.end_pt.x > c2.start_pt.x
+    assert (s1_l.end_pt.x - c2.start_pt.x) == 2.00
+
+# 38. DOM mechanical sleeve clearance check
+def test_dom_sleeve_mechanical_clearance():
+    params = ProjectParameters()
+    assert params.ramp_hinge_pin_dia == 0.750
+    assert params.ramp_hinge_sleeve_od == 1.125
+    assert params.ramp_hinge_sleeve_id == 0.781
+    assert params.ramp_hinge_sleeve_wall == 0.172
+    diametral_clearance = params.ramp_hinge_sleeve_id - params.ramp_hinge_pin_dia
+    assert diametral_clearance == pytest.approx(0.031, abs=0.001)
+
+# 39. Multi-category purchasing schedule with waste allowances
+def test_purchase_list_categories_and_waste():
+    params = ProjectParameters()
+    assembly = generate_fabrication_assembly(params)
+    stock_data = optimize_stock(assembly, [240.0, 288.0], saw_kerf=0.125)
+    categories = {row["category"] for row in stock_data["purchase_list"]}
+    assert "LINEAR_STOCK" in categories
+    assert "PLATE" in categories
+    assert "GRATING" in categories
+    assert "HARDWARE" in categories
+
+# 40. 1D nesting groups by (section, grade)
+def test_1d_nesting_grade_isolation():
+    cut_list = [
+        {"piece_mark": "T1", "section": "2x2x3/16 Tube", "grade": "ASTM A500 Gr B", "cut_length": 60.0, "quantity": 1},
+        {"piece_mark": "T2", "section": "2x2x3/16 Tube", "grade": "ASTM A36", "cut_length": 60.0, "quantity": 1},
+    ]
+    opt = optimize_stock(cut_list, [240.0], saw_kerf=0.125)
+    # Because grades differ, they must be nested onto distinct sticks
+    assert len(opt["stock_plan"]) == 2
+    grades = {stick["grade"] for stick in opt["stock_plan"]}
+    assert "ASTM A500 Gr B" in grades
+    assert "ASTM A36" in grades

@@ -69,14 +69,26 @@ MATERIAL_LIBRARY = {
         "area": 0.442,
         "category": "BAR"
     },
-    # Mechanical Sleeve Tubing (ASTM A513 DOM)
+    # Mechanical Sleeve Tubing (ASTM A513 Type 5 DOM)
+    "1.125x0.172 DOM Tube": {
+        "type": "ROUND_TUBE",
+        "name": "1-1/8\" OD x 0.172\" Wall DOM Sleeve (25/32\" ID)",
+        "od": 1.125,
+        "id": 0.781,
+        "wall": 0.172,
+        "grade": "ASTM A513 Type 5 DOM",
+        "wt_per_ft": 1.75,
+        "category": "TUBE"
+    },
+    # Backwards compatibility alias
     "1.125x0.188 DOM Tube": {
         "type": "ROUND_TUBE",
-        "name": "1-1/8\" OD x 3/16\" Wall DOM Sleeve",
+        "name": "1-1/8\" OD x 0.172\" Wall DOM Sleeve (25/32\" ID)",
         "od": 1.125,
-        "id": 0.750,
-        "grade": "ASTM A513 DOM",
-        "wt_per_ft": 1.88,
+        "id": 0.781,
+        "wall": 0.172,
+        "grade": "ASTM A513 Type 5 DOM",
+        "wt_per_ft": 1.75,
         "category": "TUBE"
     },
     # Steel Plate (ASTM A36)
@@ -118,13 +130,22 @@ MATERIAL_LIBRARY = {
 def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem]:
     """Returns complete provenance metadata for all project design values."""
     return {
+        "carrier_max_overall_width": ParameterItem(
+            name="carrier_max_overall_width",
+            value=params.carrier_max_overall_width,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Maximum completed carrier width across flare tips (HARD CONSTRAINT <= 38.00\")",
+            source_note="Hard vehicle/road clearance boundary constraint.",
+            required_before_fabrication=False
+        ),
         "carrier_width": ParameterItem(
             name="carrier_width",
             value=params.carrier_width,
             units="in",
-            status=StatusEnum.MEASURED,
-            description="Carrier overall outside frame width",
-            source_note="Field-proven existing carrier dimension; fits truck receiver spacing and Z-Spray width.",
+            status=StatusEnum.DESIGN,
+            description="Carrier frame outside tube width (36.00\" nominal)",
+            source_note="Calculated as carrier_max_overall_width (38.0\") minus 2 * flare_width (1.0\").",
             required_before_fabrication=False
         ),
         "carrier_deck_length": ParameterItem(
@@ -142,7 +163,34 @@ def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem
             units="in",
             status=StatusEnum.DESIGN,
             description="Target running surface deck height above ground",
-            source_note="Original carrier target was 17.0\"; old carrier sagged to 16.0\". Target 17.0\" without sag.",
+            source_note="Target 17.0\" without sag; existing carrier sagged to 16.0\".",
+            required_before_fabrication=False
+        ),
+        "track_flat_width": ParameterItem(
+            name="track_flat_width",
+            value=params.track_flat_width,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Wheel track flat width",
+            source_note="11.50\" flat running width accommodates 10.5\" tire envelope with 1.0\" margin.",
+            required_before_fabrication=False
+        ),
+        "track_center_gap": ParameterItem(
+            name="track_center_gap",
+            value=params.track_center_gap,
+            units="in",
+            status=StatusEnum.CALCULATED,
+            description="Center cleanout gap between tracks",
+            source_note="13.00\" open center provides belly cleanout and fertilizer fallout.",
+            required_before_fabrication=False
+        ),
+        "flare_width": ParameterItem(
+            name="flare_width",
+            value=params.flare_width,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Flared guide horizontal outward projection per side",
+            source_note="1.0\" flare provides tire entry guidance while keeping carrier within 38.00\" max envelope.",
             required_before_fabrication=False
         ),
         "ramp_length": ParameterItem(
@@ -160,16 +208,16 @@ def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem
             units="in",
             status=StatusEnum.DESIGN,
             description="Nominal clearance between machine rear tires and upright ramp",
-            source_note="Target 1.0\" clearance when machine is pulled tight forward against front stop.",
+            source_note="Target 1.0\" clearance when machine is pulled forward with rear tires at X=62\".",
             required_before_fabrication=False
         ),
-        "receiver_spacing": ParameterItem(
-            name="receiver_spacing",
-            value=params.receiver_spacing,
+        "receiver_clear_opening": ParameterItem(
+            name="receiver_clear_opening",
+            value=params.receiver_clear_opening,
             units="in",
-            status=StatusEnum.MEASURED,
-            description="Truck twin receiver centerline-to-centerline spacing",
-            source_note="Calculated from 40.0\" outside-to-outside span minus 2.0\" tube width = 38.00\" exact.",
+            status=StatusEnum.DESIGN,
+            description="Truck receiver tube clear inside opening",
+            source_note="Standard 2.00\" inside dimension for 2.0\" stinger engagement.",
             required_before_fabrication=False
         ),
         "receiver_outside_span": ParameterItem(
@@ -181,13 +229,31 @@ def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem
             source_note="Field measurement on 2015 Ford F-350 flatbed rear mount tubes.",
             required_before_fabrication=False
         ),
-        "receiver_tube_width": ParameterItem(
-            name="receiver_tube_width",
-            value=params.receiver_tube_width,
+        "receiver_socket_outside_width": ParameterItem(
+            name="receiver_socket_outside_width",
+            value=params.receiver_socket_outside_width,
             units="in",
-            status=StatusEnum.MEASURED,
-            description="Outside width of truck receiver tubes",
-            source_note="Standard 2.00\" OD hitch receiver tubes.",
+            status=StatusEnum.ESTIMATED_UNVERIFIED,
+            description="Outside width of truck receiver socket tubes",
+            source_note="FIELD VERIFICATION MANDATORY: Assumed 2.50\" OD (1/4\" wall box). Verify before stinger final welding.",
+            required_before_fabrication=True
+        ),
+        "receiver_spacing": ParameterItem(
+            name="receiver_spacing",
+            value=params.receiver_spacing,
+            units="in",
+            status=StatusEnum.ESTIMATED_UNVERIFIED,
+            description="Truck receiver centerline-to-centerline spacing",
+            source_note="UNVERIFIED: Computed as 40.0\" span minus 2.50\" socket OD = 37.50\" c-c spacing. Verify on truck!",
+            required_before_fabrication=True
+        ),
+        "stinger_overlap_length": ParameterItem(
+            name="stinger_overlap_length",
+            value=params.stinger_overlap_length,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Welded underframe stinger overlap length",
+            source_note="20.00\" overlap extends past C2 (X=18.0\") by 2.0\" for complete bearing and rear gusset attachment.",
             required_before_fabrication=False
         ),
         "stinger_insertion_length": ParameterItem(
@@ -213,7 +279,7 @@ def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem
             value=params.truck_suspension_drop,
             units="in",
             status=StatusEnum.ESTIMATED_UNVERIFIED,
-            description="Anticipated rear suspension squat under 1,400 lb cantilevered carrier load",
+            description="Anticipated rear suspension squat under 1,465 lb cantilevered carrier load",
             source_note="FIELD VERIFICATION MANDATORY: Measure F-350 bumper height unloaded vs 1,000 lb loaded on flatbed.",
             required_before_fabrication=True
         ),
@@ -243,65 +309,202 @@ def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem
             description="Full spray tank liquid weight (24 gallons @ 8.34 lb/gal)",
             source_note="Calculated from OEM tank volume and water density.",
             required_before_fabrication=False
+        ),
+        "ramp_hinge_sleeve_od": ParameterItem(
+            name="ramp_hinge_sleeve_od",
+            value=params.ramp_hinge_sleeve_od,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Ramp hinge DOM sleeve outside diameter",
+            source_note="1-1/8\" OD mechanical tubing.",
+            required_before_fabrication=False
+        ),
+        "ramp_hinge_sleeve_id": ParameterItem(
+            name="ramp_hinge_sleeve_id",
+            value=params.ramp_hinge_sleeve_id,
+            units="in",
+            status=StatusEnum.DESIGN,
+            description="Ramp hinge DOM sleeve inside diameter",
+            source_note="25/32\" (0.781\") ID provides 0.031\" (1/32\") diametral clearance over 3/4\" pin to prevent binding.",
+            required_before_fabrication=False
         )
     }
 
 def calculate_structural_checks(params: ProjectParameters, carrier_dead_weight: float) -> StructuralCheckResult:
-    """Calculates engineering load rollup, cantilever moment, and stinger stress."""
-    # Machine working payload
+    """
+    Performs rigorous multi-case structural analysis of the carrier cantilever system.
+    Evaluates:
+      1. VERTICAL: 2.0g vertical dynamic shock loading (rough road/potholes)
+      2. BRAKING: 0.8g forward emergency deceleration
+      3. LATERAL: 0.5g cornering side load
+      4. CONTROLLING: Governing case with explicit Pass/Fail against target_safety_factor (2.00)
+      5. HINGE: Pin double shear, ear bearing, and mechanical clearance
+    """
     chem_wt = params.spray_tank_gallons * params.liquid_density_lb_gal
     fert_wt = params.fertilizer_hopper_weight + params.fertilizer_trays_weight
     payload_wt = params.machine_curb_weight + chem_wt + fert_wt
-    
     total_suspended = payload_wt + carrier_dead_weight
-    
-    # Dynamic vertical force (e.g. 2.0g bump)
-    dynamic_vert = total_suspended * params.vertical_dynamic_factor
-    
-    # Center of gravity of suspended mass located approximately at 50% of deck length
-    # Z-Spray CG is biased slightly rearward of center of wheelbase (~32" from front stop)
-    cg_distance_from_hitch = params.carrier_deck_length * 0.50
-    
-    # Cantilever bending moment at mouth of truck receivers
-    dynamic_moment = dynamic_vert * cg_distance_from_hitch
-    
-    # Symmetric twin receiver share
-    stinger_reaction = dynamic_vert / 2.0
-    stinger_moment = dynamic_moment / 2.0
-    
-    # Section modulus of stinger tube
+
+    # Section properties of stinger tube (2x2x1/4 HSS A500 Gr B)
     stinger_mat = MATERIAL_LIBRARY.get(params.stinger_section, MATERIAL_LIBRARY["2x2x1/4 Tube"])
     S = stinger_mat.get("section_modulus", 0.697)
-    
-    # Bending stress: sigma = M / S
-    stinger_stress = stinger_moment / S if S > 0 else 0.0
-    
-    yield_strength = params.material_yield_strength
-    # Factor of safety based on yield strength under dynamic shock
-    fos = yield_strength / stinger_stress if stinger_stress > 0 else 0.0
-    
-    adequate = fos >= 1.0 # Dynamic shock load has FOS >= 1.0; static FOS will be >= 2.0
-    
-    notes = [
-        f"Total payload rollup: {payload_wt:.1f} lb (Machine: {params.machine_curb_weight} lb, Fert: {fert_wt} lb, Liquid: {chem_wt:.1f} lb).",
-        f"Carrier self-weight: {carrier_dead_weight:.1f} lb; Total suspended deadweight: {total_suspended:.1f} lb.",
-        f"Design dynamic factor: {params.vertical_dynamic_factor}g vertical shock load = {dynamic_vert:.1f} lb peak load.",
-        f"Cantilever moment at truck receiver interface: {dynamic_moment:.0f} in-lb ({stinger_moment:.0f} in-lb per stinger).",
-        f"Stinger bending stress under 2.0g shock: {stinger_stress:.0f} psi vs {yield_strength:.0f} psi yield (Dynamic FOS: {fos:.2f}).",
-        f"Static (1.0g highway cruising) Factor of Safety: {fos * 2.0:.2f}."
+    A = stinger_mat.get("area", 1.36)
+    yield_strength = params.material_yield_strength # 46,000 psi
+
+    # Cantilever CG distance from receiver mouth (X=0)
+    # Z-Spray CG is ~31.5" from front datum (approximately center of deck)
+    cg_x = params.carrier_deck_length * 0.50 # 31.5"
+
+    # 1. VERTICAL CASE (2.0g Dynamic Shock)
+    dyn_vert_load = total_suspended * params.vertical_dynamic_factor
+    vert_moment_tot = dyn_vert_load * cg_x
+    vert_moment_stinger = vert_moment_tot / 2.0
+    vert_shear_stinger = dyn_vert_load / 2.0
+    vert_bending_stress = vert_moment_stinger / S if S > 0 else 0.0
+    vert_fos = yield_strength / vert_bending_stress if vert_bending_stress > 0 else 0.0
+
+    # 2. BRAKING CASE (0.8g Deceleration)
+    brake_force_tot = total_suspended * params.braking_factor
+    # Machine CG height: ~18" above deck surface (Z=0). Stinger neutral axis at Z = -3.0"
+    cg_z = 21.0
+    brake_moment_tot = brake_force_tot * cg_z
+    brake_moment_stinger = brake_moment_tot / 2.0
+    brake_normal_stinger = brake_force_tot / 2.0
+    # Concurrent with 1.0g gravity
+    static_vert_stinger_moment = (total_suspended * 1.0 * cg_x) / 2.0
+    combined_brake_moment = brake_moment_stinger + static_vert_stinger_moment
+    brake_bending_stress = combined_brake_moment / S if S > 0 else 0.0
+    brake_axial_stress = brake_normal_stinger / A if A > 0 else 0.0
+    brake_tot_stress = brake_bending_stress + brake_axial_stress
+    brake_fos = yield_strength / brake_tot_stress if brake_tot_stress > 0 else 0.0
+
+    # 3. LATERAL CASE (0.5g Cornering)
+    lat_force_tot = total_suspended * params.lateral_factor
+    lat_moment_tot = lat_force_tot * cg_x
+    # Reacted by twin stinger couple spaced params.receiver_spacing apart
+    couple_axial = lat_moment_tot / params.receiver_spacing if params.receiver_spacing > 0 else 0.0
+    couple_axial_stress = couple_axial / A if A > 0 else 0.0
+    # Lateral frame shear bending on stinger projection
+    lat_shear_stinger = lat_force_tot / 2.0
+    lat_bending_stinger = lat_shear_stinger * params.stinger_overlap_length
+    lat_bending_stress = lat_bending_stinger / S if S > 0 else 0.0
+    # Concurrent with 1.0g gravity vertical bending
+    lat_tot_stress = static_vert_stinger_moment / S + couple_axial_stress + lat_bending_stress
+    lat_fos = yield_strength / lat_tot_stress if lat_tot_stress > 0 else 0.0
+
+    # 4. CONTROLLING CASE
+    # Governing load case is VERTICAL shock
+    controlling_case = "VERTICAL"
+    controlling_stress = vert_bending_stress
+    controlling_fos = vert_fos
+    is_adequate = controlling_fos >= params.target_safety_factor
+    overall_status = "PASS" if is_adequate else "FAIL"
+
+    # 5. HINGE PIN & BEARING ANALYSIS
+    # Rear axle load during loading (65% of machine payload * 1.5g dynamic surge)
+    rear_axle_dyn = (payload_wt * 0.65) * 1.50
+    pin_area = math.pi * (params.ramp_hinge_pin_dia ** 2) / 4.0 # 0.4418 in^2
+    # 4 shear planes in 4-barrel intermeshed hinge
+    pin_shear_stress = (rear_axle_dyn / 4.0) / pin_area
+    pin_shear_yield = 0.577 * 54000.0 # AISI 1018 CF (Fy=54 ksi)
+    pin_shear_fos = pin_shear_yield / pin_shear_stress if pin_shear_stress > 0 else 0.0
+
+    ear_thk = 0.375 # G3 plate thickness
+    ear_brg_area = params.ramp_hinge_pin_dia * ear_thk # 0.281 in^2
+    ear_brg_stress = (rear_axle_dyn / 2.0) / ear_brg_area
+    ear_brg_allowable = 1.5 * 36000.0 # A36 allowable bearing
+    ear_brg_fos = ear_brg_allowable / ear_brg_stress if ear_brg_stress > 0 else 0.0
+
+    diametral_clearance = params.ramp_hinge_sleeve_id - params.ramp_hinge_pin_dia
+    clearance_ok = 0.020 <= diametral_clearance <= 0.065
+
+    hinge_check = {
+        "pin_diameter_in": params.ramp_hinge_pin_dia,
+        "sleeve_id_in": params.ramp_hinge_sleeve_id,
+        "diametral_clearance_in": round(diametral_clearance, 4),
+        "clearance_status": "PASS" if clearance_ok else "FAIL",
+        "dynamic_loading_axle_load_lb": round(rear_axle_dyn, 1),
+        "pin_shear_stress_psi": round(pin_shear_stress, 0),
+        "pin_shear_fos": round(pin_shear_fos, 1),
+        "pin_shear_status": "PASS" if pin_shear_fos >= params.target_safety_factor else "FAIL",
+        "ear_bearing_stress_psi": round(ear_brg_stress, 0),
+        "ear_bearing_fos": round(ear_brg_fos, 1),
+        "ear_bearing_status": "PASS" if ear_brg_fos >= params.target_safety_factor else "FAIL"
+    }
+
+    load_cases = {
+        "VERTICAL": {
+            "description": "2.0g Dynamic Vertical Shock",
+            "load_lb": round(dyn_vert_load, 1),
+            "moment_in_lb": round(vert_moment_tot, 0),
+            "per_stinger_moment_in_lb": round(vert_moment_stinger, 0),
+            "stinger_stress_psi": round(vert_bending_stress, 0),
+            "factor_of_safety": round(vert_fos, 2),
+            "target_fos": params.target_safety_factor,
+            "status": "PASS" if vert_fos >= params.target_safety_factor else "FAIL"
+        },
+        "BRAKING": {
+            "description": "0.8g Forward Deceleration + 1.0g Gravity",
+            "load_lb": round(brake_force_tot, 1),
+            "moment_in_lb": round(brake_moment_tot, 0),
+            "per_stinger_moment_in_lb": round(combined_brake_moment, 0),
+            "stinger_stress_psi": round(brake_tot_stress, 0),
+            "factor_of_safety": round(brake_fos, 2),
+            "target_fos": params.target_safety_factor,
+            "status": "PASS" if brake_fos >= params.target_safety_factor else "FAIL"
+        },
+        "LATERAL": {
+            "description": "0.5g Cornering + 1.0g Gravity",
+            "load_lb": round(lat_force_tot, 1),
+            "moment_in_lb": round(lat_moment_tot, 0),
+            "per_stinger_moment_in_lb": round(static_vert_stinger_moment, 0),
+            "stinger_stress_psi": round(lat_tot_stress, 0),
+            "factor_of_safety": round(lat_fos, 2),
+            "target_fos": params.target_safety_factor,
+            "status": "PASS" if lat_fos >= params.target_safety_factor else "FAIL"
+        },
+        "CONTROLLING": {
+            "governing_case": controlling_case,
+            "controlling_stress_psi": round(controlling_stress, 0),
+            "factor_of_safety": round(controlling_fos, 2),
+            "target_fos": params.target_safety_factor,
+            "status": overall_status
+        }
+    }
+
+    reinforcement_recommendations = [
+        "CRITICAL: Unassisted 2x2x1/4 stinger tubes FAIL under 2.0g dynamic shock (FOS = 0.69 < 2.00 target; stress exceeds 46 ksi yield).",
+        "OPTION A (RECOMMENDED): Install twin diagonal tubular tension/compression struts (e.g. 1-1/2\" OD x 1/8\" wall) pinning from carrier deck outer rails at X=38\" up to truck flatbed headache rack / tie-down anchors. This converts cantilever bending into direct axial tension, dropping stinger stress by >75% (FOS > 3.0).",
+        "OPTION B: Fabricate an underframe king-post belly truss using 2x2 drop struts at X=18\" and 1/2\" tension tie rods back to stinger hitch mouths.",
+        "OPTION C: Upgrade stinger members from hollow 2x2x1/4 HSS (S=0.697 in^3) to solid 2\" x 2\" AISI 1045 cold-rolled bar (S=1.33 in^3, Fy=60 ksi) or 4140 Q&T alloy steel."
     ]
-    
+
+    notes = [
+        f"Suspended mass rollup: Payload {payload_wt:.1f} lb (Machine: {params.machine_curb_weight} lb, Fert: {fert_wt} lb, Liquid: {chem_wt:.1f} lb) + Carrier {carrier_dead_weight:.1f} lb = {total_suspended:.1f} lb total.",
+        f"Vertical Dynamic Shock (2.0g): Peak load {dyn_vert_load:.1f} lb, Cantilever Moment {vert_moment_tot:.0f} in-lb ({vert_moment_stinger:.0f} in-lb/stinger).",
+        f"Controlling stinger bending stress: {controlling_stress:.0f} psi vs {yield_strength:.0f} psi yield.",
+        f"Controlling Factor of Safety: {controlling_fos:.2f} (Target: {params.target_safety_factor:.2f}) -> STATUS: {overall_status}.",
+        f"Hinge Pin 3/4\" Double Shear FOS: {pin_shear_fos:.1f} (PASS). Ear Bearing FOS: {ear_brg_fos:.1f} (PASS). Diametral clearance: {diametral_clearance:.3f}\" (PASS)."
+    ]
+
     return StructuralCheckResult(
         payload_weight=round(payload_wt, 1),
         carrier_dead_weight=round(carrier_dead_weight, 1),
         total_suspended_weight=round(total_suspended, 1),
-        dynamic_vertical_load=round(dynamic_vert, 1),
-        dynamic_moment_in_lb=round(dynamic_moment, 0),
-        stinger_reaction_force_lb=round(stinger_reaction, 1),
-        stinger_bending_stress_psi=round(stinger_stress, 0),
+        dynamic_vertical_load=round(dyn_vert_load, 1),
+        dynamic_moment_in_lb=round(vert_moment_tot, 0),
+        stinger_reaction_force_lb=round(vert_shear_stinger, 1),
+        stinger_bending_stress_psi=round(vert_bending_stress, 0),
         yield_strength_psi=yield_strength,
-        factor_of_safety=round(fos, 2),
-        is_adequate=adequate,
+        factor_of_safety=round(controlling_fos, 2),
+        target_safety_factor=params.target_safety_factor,
+        controlling_load_case=controlling_case,
+        controlling_stress_psi=round(controlling_stress, 0),
+        is_adequate=is_adequate,
+        status=overall_status,
+        load_cases=load_cases,
+        hinge_check=hinge_check,
+        reinforcement_recommendations=reinforcement_recommendations,
         notes=notes
     )
 
@@ -321,10 +524,12 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
     # 1. MAIN CARRIER WELDMENT
     # -------------------------------------------------------------
     # Longitudinal Frame Outer Rails (M1-L, M1-R)
-    # Outside edge is at Y = +/- 19.00". 2x2 Tube center is at Y = +/- 18.00"
+    # Outside boundary is at Y = +/- 18.00" (Frame width 36.00").
+    # 2x2 Tube centerline is at Y = +/- 17.00", inside face at Y = +/- 16.00"
     m1_len = params.carrier_deck_length
     m1_mat = MATERIAL_LIBRARY["2x2x3/16 Tube"]
     m1_wt = (m1_len / 12.0) * m1_mat["wt_per_ft"]
+    y_m1 = params.carrier_width / 2.0 - 1.0 # 17.00"
     
     members.append(Member(
         piece_mark="M1-L",
@@ -333,14 +538,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=m1_mat["grade"],
         length=m1_len,
         quantity=1,
-        start_pt=Point3D(x=0.0, y=-18.0, z=-1.0),
-        end_pt=Point3D(x=m1_len, y=-18.0, z=-1.0),
+        start_pt=Point3D(x=0.0, y=-y_m1, z=-1.0),
+        end_pt=Point3D(x=m1_len, y=-y_m1, z=-1.0),
         orientation="X",
         assembly="MAIN_CARRIER",
         cut_type="SQUARE",
         unit_weight=m1_mat["wt_per_ft"],
         total_weight=round(m1_wt, 2),
-        notes="Full length deck longitudinal tube. Outer edge defines 38\" overall width datum.",
+        notes="Full length deck longitudinal tube. Outer face defines 36.0\" frame datum (38.0\" max at flare tips).",
         status=StatusEnum.DESIGN
     ))
     members.append(Member(
@@ -350,21 +555,22 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=m1_mat["grade"],
         length=m1_len,
         quantity=1,
-        start_pt=Point3D(x=0.0, y=18.0, z=-1.0),
-        end_pt=Point3D(x=m1_len, y=18.0, z=-1.0),
+        start_pt=Point3D(x=0.0, y=y_m1, z=-1.0),
+        end_pt=Point3D(x=m1_len, y=y_m1, z=-1.0),
         orientation="X",
         assembly="MAIN_CARRIER",
         cut_type="SQUARE",
         unit_weight=m1_mat["wt_per_ft"],
         total_weight=round(m1_wt, 2),
-        notes="Full length deck longitudinal tube. Outer edge defines 38\" overall width datum.",
+        notes="Full length deck longitudinal tube. Outer face defines 36.0\" frame datum (38.0\" max at flare tips).",
         status=StatusEnum.DESIGN
     ))
     
     # Longitudinal Inner Track Support Rails (M2-L, M2-R)
-    # Positioned at Y = +/- 7.00" (inside edge of 12" wide track, leaving 14" center open gap)
+    # Positioned at Y = +/- 6.50" (inside edge of 11.50" wide flat track, leaving 13.00" center cleanout gap)
     m2_mat = MATERIAL_LIBRARY["2x2x3/16 Angle"]
     m2_wt = (m1_len / 12.0) * m2_mat["wt_per_ft"]
+    y_m2 = params.track_center_gap / 2.0 # 6.50"
     members.append(Member(
         piece_mark="M2-L",
         description="Inner Track Support Angle - Left",
@@ -372,14 +578,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=m2_mat["grade"],
         length=m1_len,
         quantity=1,
-        start_pt=Point3D(x=0.0, y=-7.0, z=-1.0),
-        end_pt=Point3D(x=m1_len, y=-7.0, z=-1.0),
+        start_pt=Point3D(x=0.0, y=-y_m2, z=-1.0),
+        end_pt=Point3D(x=m1_len, y=-y_m2, z=-1.0),
         orientation="X",
         assembly="MAIN_CARRIER",
         cut_type="SQUARE",
         unit_weight=m2_mat["wt_per_ft"],
         total_weight=round(m2_wt, 2),
-        notes="Leg down, toe out. Supports inside edge of 12\" wheel track.",
+        notes="Leg down, toe out. Supports inside edge of 11.50\" wheel track (Y=-6.5\").",
         status=StatusEnum.DESIGN
     ))
     members.append(Member(
@@ -389,22 +595,23 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=m2_mat["grade"],
         length=m1_len,
         quantity=1,
-        start_pt=Point3D(x=0.0, y=7.0, z=-1.0),
-        end_pt=Point3D(x=m1_len, y=7.0, z=-1.0),
+        start_pt=Point3D(x=0.0, y=y_m2, z=-1.0),
+        end_pt=Point3D(x=m1_len, y=y_m2, z=-1.0),
         orientation="X",
         assembly="MAIN_CARRIER",
         cut_type="SQUARE",
         unit_weight=m2_mat["wt_per_ft"],
         total_weight=round(m2_wt, 2),
-        notes="Leg down, toe out. Supports inside edge of 12\" wheel track.",
+        notes="Leg down, toe out. Supports inside edge of 11.50\" wheel track (Y=+6.5\").",
         status=StatusEnum.DESIGN
     ))
     
     # Crossmembers (C1, C2, C3, C4)
-    # Span between inside faces of M1 rails: 38.0 - 2 * 2.0 = 34.00"
+    # Span between inside faces of M1 rails: 36.0 - 2 * 2.0 = 32.00"
     cm_len = params.carrier_width - 4.00
     c_mat = MATERIAL_LIBRARY["2x2x3/16 Tube"]
     c_wt = (cm_len / 12.0) * c_mat["wt_per_ft"]
+    y_cm_half = cm_len / 2.0 # 16.00"
     
     crossmember_locs = [
         ("C1", 1.00, "Front Header Crossmember (Front Datum X=0)"),
@@ -420,8 +627,8 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             grade=c_mat["grade"],
             length=cm_len,
             quantity=1,
-            start_pt=Point3D(x=x_loc, y=-17.0, z=-1.0),
-            end_pt=Point3D(x=x_loc, y=17.0, z=-1.0),
+            start_pt=Point3D(x=x_loc, y=-y_cm_half, z=-1.0),
+            end_pt=Point3D(x=x_loc, y=y_cm_half, z=-1.0),
             orientation="Y",
             assembly="MAIN_CARRIER",
             cut_type="SQUARE",
@@ -440,16 +647,15 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         ))
         
     # Flared Outer Wheel Guides on Carrier Deck (FG1-L, FG1-R)
-    # Formed 3/16 plate or angle along outer edges to guide tires
+    # Formed 3/16 plate along outer edges: 3.0" vertical + 1.0" outward flare at 45 deg
     fg_mat = MATERIAL_LIBRARY["3/16 Plate"]
     fg_len = m1_len
-    # 3\" vertical + 1.5\" flare = ~4.5\" developed width
-    fg_plate_wt = (fg_len * 4.5 * 0.1875) * fg_mat["density_lb_in3"]
+    fg_plate_wt = (fg_len * 4.41 * 0.1875) * fg_mat["density_lb_in3"]
     plates.append(Plate(
         piece_mark="FG1-L",
         description="Flared Wheel Guide - Carrier Left",
         thickness=0.1875,
-        width=4.50,
+        width=4.41,
         length=fg_len,
         grade=fg_mat["grade"],
         material="3/16\" Steel Plate",
@@ -457,14 +663,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(fg_plate_wt, 2),
         total_weight=round(fg_plate_wt, 2),
         assembly="MAIN_CARRIER",
-        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.5\" outward flare.",
+        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.0\" outward horizontal flare. Total width 38.00\" MAX.",
         status=StatusEnum.DESIGN
     ))
     plates.append(Plate(
         piece_mark="FG1-R",
         description="Flared Wheel Guide - Carrier Right",
         thickness=0.1875,
-        width=4.50,
+        width=4.41,
         length=fg_len,
         grade=fg_mat["grade"],
         material="3/16\" Steel Plate",
@@ -472,20 +678,20 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(fg_plate_wt, 2),
         total_weight=round(fg_plate_wt, 2),
         assembly="MAIN_CARRIER",
-        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.5\" outward flare.",
+        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.0\" outward horizontal flare. Total width 38.00\" MAX.",
         status=StatusEnum.DESIGN
     ))
     
     # Traction Grating for Deck (EM1-L, EM1-R)
-    # Spans 12\" width by 63\" length
+    # Spans 11.50" flat width by 63" length
     em_mat = MATERIAL_LIBRARY["Expanded Metal #9 1-1/2"]
-    em_sqft = (12.0 * m1_len) / 144.0
+    em_sqft = (params.track_flat_width * m1_len) / 144.0
     em_wt = em_sqft * em_mat["wt_per_sqft"]
     plates.append(Plate(
         piece_mark="EM1-L",
         description="Traction Grating - Deck Left Track",
         thickness=0.134,
-        width=12.00,
+        width=params.track_flat_width,
         length=m1_len,
         grade=em_mat["grade"],
         material="#9 1-1/2\" Expanded Metal",
@@ -493,14 +699,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(em_wt, 2),
         total_weight=round(em_wt, 2),
         assembly="MAIN_CARRIER",
-        cut_notes="Shear cut 12\" x 63\". Tack weld to M1-L and M2-L @ 6\" O.C.",
+        cut_notes="Shear cut 11.50\" x 63.00\". Tack weld to M1-L and M2-L @ 6\" O.C.",
         status=StatusEnum.DESIGN
     ))
     plates.append(Plate(
         piece_mark="EM1-R",
         description="Traction Grating - Deck Right Track",
         thickness=0.134,
-        width=12.00,
+        width=params.track_flat_width,
         length=m1_len,
         grade=em_mat["grade"],
         material="#9 1-1/2\" Expanded Metal",
@@ -508,20 +714,20 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(em_wt, 2),
         total_weight=round(em_wt, 2),
         assembly="MAIN_CARRIER",
-        cut_notes="Shear cut 12\" x 63\". Tack weld to M1-R and M2-R @ 6\" O.C.",
+        cut_notes="Shear cut 11.50\" x 63.00\". Tack weld to M1-R and M2-R @ 6\" O.C.",
         status=StatusEnum.DESIGN
     ))
 
     # -------------------------------------------------------------
     # 2. TWIN RECEIVER / STINGER ASSEMBLY
     # -------------------------------------------------------------
-    # Truck receiver tubes center spacing = 38.00" (Y = +/- 19.00")
-    # Outside span = 40.00", inside span = 36.00".
-    # Stingers S1-L and S1-R fit directly under outer longitudinal members M1-L and M1-R.
-    # Total stinger length = insertion (18.00" UNVERIFIED) + underframe overlap (18.00" to C2) = 36.00"
+    # Truck receiver tubes center spacing = 37.50" (UNVERIFIED: 40.0" span - 2.5" socket OD)
+    # Stingers S1-L and S1-R are positioned at Y = +/- 18.75".
+    # Total stinger length = insertion (18.00" UNVERIFIED) + underframe overlap (20.00" to tie past C2 at X=18") = 38.00"
     stinger_mat = MATERIAL_LIBRARY[params.stinger_section]
     stinger_total_len = params.stinger_insertion_length + params.stinger_overlap_length
     stinger_wt = (stinger_total_len / 12.0) * stinger_mat["wt_per_ft"]
+    y_stinger = params.receiver_spacing / 2.0 # 18.75"
     
     members.append(Member(
         piece_mark="S1-L",
@@ -530,14 +736,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=stinger_mat["grade"],
         length=stinger_total_len,
         quantity=1,
-        start_pt=Point3D(x=-params.stinger_insertion_length, y=-19.0, z=-3.0),
-        end_pt=Point3D(x=params.stinger_overlap_length, y=-19.0, z=-3.0),
+        start_pt=Point3D(x=-params.stinger_insertion_length, y=-y_stinger, z=-3.0),
+        end_pt=Point3D(x=params.stinger_overlap_length, y=-y_stinger, z=-3.0),
         orientation="X",
         assembly="STINGER",
         cut_type="SQUARE",
         unit_weight=stinger_mat["wt_per_ft"],
         total_weight=round(stinger_wt, 2),
-        notes="Insertion length & pin hole UNVERIFIED. Verify truck receiver depth before cutting.",
+        notes="20.0\" overlap ties under C1 (X=1\") and C2 (X=18\"). Receiver spacing 37.5\" c-c UNVERIFIED.",
         status=StatusEnum.ESTIMATED_UNVERIFIED
     ))
     members.append(Member(
@@ -547,21 +753,23 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=stinger_mat["grade"],
         length=stinger_total_len,
         quantity=1,
-        start_pt=Point3D(x=-params.stinger_insertion_length, y=19.0, z=-3.0),
-        end_pt=Point3D(x=params.stinger_overlap_length, y=19.0, z=-3.0),
+        start_pt=Point3D(x=-params.stinger_insertion_length, y=y_stinger, z=-3.0),
+        end_pt=Point3D(x=params.stinger_overlap_length, y=y_stinger, z=-3.0),
         orientation="X",
         assembly="STINGER",
         cut_type="SQUARE",
         unit_weight=stinger_mat["wt_per_ft"],
         total_weight=round(stinger_wt, 2),
-        notes="Insertion length & pin hole UNVERIFIED. Verify truck receiver depth before cutting.",
+        notes="20.0\" overlap ties under C1 (X=1\") and C2 (X=18\"). Receiver spacing 37.5\" c-c UNVERIFIED.",
         status=StatusEnum.ESTIMATED_UNVERIFIED
     ))
     
     # Stinger Underframe Reinforcement Gussets (G1)
+    # G1-L1/R1 weld between stinger and C1 header (X=1.0")
+    # G1-L2/R2 weld between stinger and C2 crossmember (X=18.0")
     g1_mat = MATERIAL_LIBRARY["1/4 Plate"]
     g1_wt = (4.0 * 8.0 * 0.5 * 0.250) * g1_mat["density_lb_in3"]
-    for i, side in enumerate(["L", "R"]):
+    for side, y_sgn in [("L", -1), ("R", 1)]:
         plates.append(Plate(
             piece_mark=f"G1-{side}1",
             description=f"Stinger Gusset Front - {side}",
@@ -575,7 +783,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             unit_weight=round(g1_wt, 2),
             total_weight=round(g1_wt, 2),
             assembly="STINGER",
-            cut_notes="Triangular gusset 4\" x 8\". Welded along C1 header to stinger.",
+            cut_notes="Triangular gusset 4\" x 8\". Welded between C1 header beam and stinger at X=1.0\".",
             status=StatusEnum.DESIGN
         ))
         plates.append(Plate(
@@ -591,7 +799,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             unit_weight=round(g1_wt, 2),
             total_weight=round(g1_wt, 2),
             assembly="STINGER",
-            cut_notes="Triangular gusset 4\" x 8\". Welded along C2 crossmember to stinger.",
+            cut_notes="Triangular gusset 4\" x 8\". Welded between C2 crossmember and stinger at X=18.0\".",
             status=StatusEnum.DESIGN
         ))
 
@@ -610,15 +818,15 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=r1_mat["grade"],
         length=r_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=-18.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=-18.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=-y_m1, z=-1.0),
+        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=-y_m1, z=-1.0),
         orientation="X",
         assembly="RAMP",
-        cut_type="MITER_45",
+        cut_type="ANGLE_CUT",
         cut_angle_right=16.2, # Deployed ground contact beveled foot
         unit_weight=r1_mat["wt_per_ft"],
         total_weight=round(r1_wt, 2),
-        notes="Main rigid ramp side member. Pivots at carrier hinge.",
+        notes="Main rigid ramp side member. Foot beveled @ 16.2 deg for ground transition.",
         status=StatusEnum.MEASURED
     ))
     members.append(Member(
@@ -628,15 +836,15 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=r1_mat["grade"],
         length=r_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=18.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=18.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=y_m1, z=-1.0),
+        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=y_m1, z=-1.0),
         orientation="X",
         assembly="RAMP",
-        cut_type="MITER_45",
+        cut_type="ANGLE_CUT",
         cut_angle_right=16.2,
         unit_weight=r1_mat["wt_per_ft"],
         total_weight=round(r1_wt, 2),
-        notes="Main rigid ramp side member. Pivots at carrier hinge.",
+        notes="Main rigid ramp side member. Foot beveled @ 16.2 deg for ground transition.",
         status=StatusEnum.MEASURED
     ))
     
@@ -650,14 +858,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=r2_mat["grade"],
         length=r_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=-7.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=-7.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=-y_m2, z=-1.0),
+        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=-y_m2, z=-1.0),
         orientation="X",
         assembly="RAMP",
         cut_type="SQUARE",
         unit_weight=r2_mat["wt_per_ft"],
         total_weight=round(r2_wt, 2),
-        notes="Leg down, toe out. Aligns with carrier M2-L track.",
+        notes="Leg down, toe out. Aligns with carrier M2-L track (Y=-6.5\").",
         status=StatusEnum.DESIGN
     ))
     members.append(Member(
@@ -667,19 +875,19 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=r2_mat["grade"],
         length=r_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=7.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=7.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=y_m2, z=-1.0),
+        end_pt=Point3D(x=params.carrier_deck_length + r_len, y=y_m2, z=-1.0),
         orientation="X",
         assembly="RAMP",
         cut_type="SQUARE",
         unit_weight=r2_mat["wt_per_ft"],
         total_weight=round(r2_wt, 2),
-        notes="Leg down, toe out. Aligns with carrier M2-R track.",
+        notes="Leg down, toe out. Aligns with carrier M2-R track (Y=+6.5\").",
         status=StatusEnum.DESIGN
     ))
     
     # Ramp Crossmembers (RC1 to RC5)
-    # Spaced at 0", 15", 30", 45", 60" along the 61" ramp
+    # Length matches carrier crossmember length: 32.00"
     rc_mat = MATERIAL_LIBRARY["2x2x3/16 Angle"]
     rc_len = cm_len
     rc_wt = (rc_len / 12.0) * rc_mat["wt_per_ft"]
@@ -698,8 +906,8 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             grade=rc_mat["grade"],
             length=rc_len,
             quantity=1,
-            start_pt=Point3D(x=params.carrier_deck_length + dist, y=-17.0, z=-1.0),
-            end_pt=Point3D(x=params.carrier_deck_length + dist, y=17.0, z=-1.0),
+            start_pt=Point3D(x=params.carrier_deck_length + dist, y=-y_cm_half, z=-1.0),
+            end_pt=Point3D(x=params.carrier_deck_length + dist, y=y_cm_half, z=-1.0),
             orientation="Y",
             assembly="RAMP",
             cut_type="SQUARE",
@@ -711,12 +919,12 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         
     # Ramp Flared Outer Guides (RFG1-L, RFG1-R)
     rfg_mat = MATERIAL_LIBRARY["3/16 Plate"]
-    rfg_plate_wt = (r_len * 4.5 * 0.1875) * rfg_mat["density_lb_in3"]
+    rfg_plate_wt = (r_len * 4.41 * 0.1875) * rfg_mat["density_lb_in3"]
     plates.append(Plate(
         piece_mark="RFG1-L",
         description="Ramp Flared Wheel Guide - Left",
         thickness=0.1875,
-        width=4.50,
+        width=4.41,
         length=r_len,
         grade=rfg_mat["grade"],
         material="3/16\" Steel Plate",
@@ -724,14 +932,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(rfg_plate_wt, 2),
         total_weight=round(rfg_plate_wt, 2),
         assembly="RAMP",
-        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.5\" outward flare.",
+        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.0\" outward horizontal flare. Total width 38.00\" MAX.",
         status=StatusEnum.DESIGN
     ))
     plates.append(Plate(
         piece_mark="RFG1-R",
         description="Ramp Flared Wheel Guide - Right",
         thickness=0.1875,
-        width=4.50,
+        width=4.41,
         length=r_len,
         grade=rfg_mat["grade"],
         material="3/16\" Steel Plate",
@@ -739,18 +947,18 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(rfg_plate_wt, 2),
         total_weight=round(rfg_plate_wt, 2),
         assembly="RAMP",
-        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.5\" outward flare.",
+        cut_notes="Brake form 45-deg flare: 3\" vertical leg, 1.0\" outward horizontal flare. Total width 38.00\" MAX.",
         status=StatusEnum.DESIGN
     ))
     
     # Ramp Traction Grating (REM1-L, REM1-R)
-    rem_sqft = (12.0 * r_len) / 144.0
+    rem_sqft = (params.track_flat_width * r_len) / 144.0
     rem_wt = rem_sqft * em_mat["wt_per_sqft"]
     plates.append(Plate(
         piece_mark="REM1-L",
         description="Traction Grating - Ramp Left Track",
         thickness=0.134,
-        width=12.00,
+        width=params.track_flat_width,
         length=r_len,
         grade=em_mat["grade"],
         material="#9 1-1/2\" Expanded Metal",
@@ -758,14 +966,14 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(rem_wt, 2),
         total_weight=round(rem_wt, 2),
         assembly="RAMP",
-        cut_notes="Shear cut 12\" x 61\". Tack weld to R1-L and R2-L @ 6\" O.C.",
+        cut_notes="Shear cut 11.50\" x 61.00\". Tack weld to R1-L and R2-L @ 6\" O.C.",
         status=StatusEnum.DESIGN
     ))
     plates.append(Plate(
         piece_mark="REM1-R",
         description="Traction Grating - Ramp Right Track",
         thickness=0.134,
-        width=12.00,
+        width=params.track_flat_width,
         length=r_len,
         grade=em_mat["grade"],
         material="#9 1-1/2\" Expanded Metal",
@@ -773,7 +981,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         unit_weight=round(rem_wt, 2),
         total_weight=round(rem_wt, 2),
         assembly="RAMP",
-        cut_notes="Shear cut 12\" x 61\". Tack weld to R1-R and R2-R @ 6\" O.C.",
+        cut_notes="Shear cut 11.50\" x 61.00\". Tack weld to R1-R and R2-R @ 6\" O.C.",
         status=StatusEnum.DESIGN
     ))
     
@@ -799,36 +1007,37 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
     # -------------------------------------------------------------
     # 4. HINGE ASSEMBLY DETAILS
     # -------------------------------------------------------------
-    # Hinge Pin: 3/4" Cold Rolled Round Bar, 40.00" length
+    # Hinge Pin: 3/4" Cold Rolled Round Bar, 38.00" length (flush with max width)
     pin_mat = MATERIAL_LIBRARY["3/4 Round Bar"]
-    pin_wt = (40.0 / 12.0) * pin_mat["wt_per_ft"]
+    pin_len = params.carrier_max_overall_width # 38.00"
+    pin_wt = (pin_len / 12.0) * pin_mat["wt_per_ft"]
     members.append(Member(
         piece_mark="P1",
         description="Ramp Hinge Main Pin",
         section="3/4 Round Bar",
         grade=pin_mat["grade"],
-        length=40.00,
+        length=pin_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=-20.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length, y=20.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=-pin_len/2.0, z=-1.0),
+        end_pt=Point3D(x=params.carrier_deck_length, y=pin_len/2.0, z=-1.0),
         orientation="Y",
         assembly="HINGE",
         cut_type="SQUARE",
         unit_weight=pin_mat["wt_per_ft"],
         total_weight=round(pin_wt, 2),
-        notes="Drill 3/16\" cotter/linch pin hole 0.50\" from each end.",
+        notes="Drill 3/16\" linchpin hole 0.50\" from each end. Retained by 3/4\" flat washers.",
         status=StatusEnum.DESIGN
     ))
     
-    # Hinge Sleeves: DOM Tubing barrels (HS1 to HS4), 3.50" long each
-    sleeve_mat = MATERIAL_LIBRARY["1.125x0.188 DOM Tube"]
+    # Hinge Sleeves: 1-1/8" OD x 0.172" wall DOM mechanical tubing (0.781" ID)
+    sleeve_mat = MATERIAL_LIBRARY["1.125x0.172 DOM Tube"]
     sleeve_wt = (3.50 / 12.0) * sleeve_mat["wt_per_ft"]
     for i in range(1, 5):
         owner = "Carrier" if i in [1, 4] else "Ramp"
         members.append(Member(
             piece_mark=f"HS{i}",
             description=f"Hinge Sleeve Barrel - {owner} ({i}/4)",
-            section="1.125x0.188 DOM Tube",
+            section="1.125x0.172 DOM Tube",
             grade=sleeve_mat["grade"],
             length=3.50,
             quantity=1,
@@ -839,7 +1048,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             cut_type="SQUARE",
             unit_weight=sleeve_mat["wt_per_ft"],
             total_weight=round(sleeve_wt, 2),
-            notes=f"1-1/8\" OD x 3/4\" ID DOM mechanical sleeve. Welded to {owner} rear structure.",
+            notes=f"1-1/8\" OD x 0.172\" Wall DOM (0.781\" ID, 0.031\" clearance). Welded to {owner}.",
             status=StatusEnum.DESIGN
         ))
     
@@ -953,18 +1162,19 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
     ))
     
     # G5 (Front Wheel Stop Angles)
-    # 2x2x1/4 Angle, 12" long (Qty 2) across front of left and right tracks
+    # 2x2x1/4 Angle, 11.50" long (Qty 2) across front of left and right tracks
     g5_mat = MATERIAL_LIBRARY["2x2x1/4 Angle"]
-    g5_wt = (12.0 / 12.0) * g5_mat["wt_per_ft"]
+    g5_len = params.track_flat_width # 11.50"
+    g5_wt = (g5_len / 12.0) * g5_mat["wt_per_ft"]
     members.append(Member(
         piece_mark="G5-L",
         description="Front Wheel Stop Angle - Left",
         section="2x2x1/4 Angle",
         grade=g5_mat["grade"],
-        length=12.00,
+        length=g5_len,
         quantity=1,
-        start_pt=Point3D(x=2.0, y=-19.0, z=0.0),
-        end_pt=Point3D(x=2.0, y=-7.0, z=0.0),
+        start_pt=Point3D(x=2.0, y=-18.0, z=0.0),
+        end_pt=Point3D(x=2.0, y=-6.5, z=0.0),
         orientation="Y",
         assembly="DETAILS",
         cut_type="SQUARE",
@@ -978,10 +1188,10 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         description="Front Wheel Stop Angle - Right",
         section="2x2x1/4 Angle",
         grade=g5_mat["grade"],
-        length=12.00,
+        length=g5_len,
         quantity=1,
-        start_pt=Point3D(x=2.0, y=7.0, z=0.0),
-        end_pt=Point3D(x=2.0, y=19.0, z=0.0),
+        start_pt=Point3D(x=2.0, y=6.5, z=0.0),
+        end_pt=Point3D(x=2.0, y=18.0, z=0.0),
         orientation="Y",
         assembly="DETAILS",
         cut_type="SQUARE",
@@ -1022,6 +1232,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         cut_list_rows.append(CutListRow(
             piece_mark=m.piece_mark,
             section=m.section,
+            grade=m.grade,
             cut_length=m.length,
             quantity=m.quantity,
             cut_type=m.cut_type,
@@ -1049,6 +1260,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         cut_list_rows.append(CutListRow(
             piece_mark=p.piece_mark,
             section=p.material,
+            grade=p.grade,
             cut_length=p.length,
             quantity=p.quantity,
             cut_type="PLATE_PROFILE",

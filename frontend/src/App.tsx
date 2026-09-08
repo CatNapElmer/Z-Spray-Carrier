@@ -14,25 +14,29 @@ interface ParameterProvenance {
 function App() {
   const [activeTab, setActiveTab] = useState<string>('CARRIER')
   const [params, setParams] = useState({
-    carrier_width: 38.0,
+    carrier_max_overall_width: 38.0,
+    carrier_width: 36.0,
     carrier_deck_length: 63.0,
     deck_height: 17.0,
-    track_flat_width: 12.0,
-    track_outer_spacing: 38.0,
-    track_center_gap: 14.0,
+    track_flat_width: 11.5,
+    track_outer_spacing: 36.0,
+    track_center_gap: 13.0,
     flared_guide_height: 3.0,
     flare_angle: 45.0,
-    flare_width: 1.5,
+    flare_width: 1.0,
     ramp_length: 61.0,
     ramp_clearance: 1.0,
     ramp_hinge_pin_dia: 0.75,
-    ramp_hinge_sleeve_wall: 0.188,
-    receiver_spacing: 38.0,
+    ramp_hinge_sleeve_od: 1.125,
+    ramp_hinge_sleeve_id: 0.781,
+    ramp_hinge_sleeve_wall: 0.172,
+    receiver_spacing: 37.5,
     receiver_outside_span: 40.0,
+    receiver_socket_outside_width: 2.5,
     receiver_tube_width: 2.0,
     stinger_section: '2x2x1/4 Tube',
     stinger_insertion_length: 18.0,
-    stinger_overlap_length: 14.0,
+    stinger_overlap_length: 20.0,
     hitch_pin_hole_setback: 3.0,
     hitch_pin_hole_dia: 0.656,
     truck_suspension_drop: 1.5,
@@ -198,28 +202,34 @@ function App() {
       {/* Metric Callout Banner */}
       <div className="metrics-banner">
         <div className="metric-chip">
-          <span className="label">OVERALL WIDTH:</span>
-          <span className="val">{params.carrier_width}" {renderBadge('MEASURED')}</span>
+          <span className="label">MAX OVERALL WIDTH:</span>
+          <span className="val">{params.carrier_max_overall_width}" {renderBadge('DESIGN')}</span>
+        </div>
+        <div className="metric-chip">
+          <span className="label">FRAME WIDTH:</span>
+          <span className="val">{params.carrier_width}" {renderBadge('DESIGN')}</span>
         </div>
         <div className="metric-chip">
           <span className="label">DECK LENGTH:</span>
           <span className="val">{params.carrier_deck_length}" {renderBadge('MEASURED')}</span>
         </div>
         <div className="metric-chip">
-          <span className="label">RAMP LENGTH:</span>
-          <span className="val">{params.ramp_length}" {renderBadge('MEASURED')}</span>
-        </div>
-        <div className="metric-chip">
           <span className="label">RECEIVERS:</span>
-          <span className="val">38.0" C-C {renderBadge('MEASURED')}</span>
+          <span className="val">{params.receiver_spacing}" C-C {renderBadge('ESTIMATED_UNVERIFIED')}</span>
         </div>
         <div className="metric-chip">
           <span className="label">EST. STEEL DEADWEIGHT:</span>
           <span className="val">{assembly?.total_carrier_weight || '--'} LB</span>
         </div>
         <div className="metric-chip">
-          <span className="label">DYNAMIC FOS (2.0g):</span>
-          <span className="val">{assembly?.structural?.factor_of_safety || '--'}</span>
+          <span className="label">STRUCTURAL STATUS:</span>
+          <span className="val">
+            {assembly?.structural?.status === 'PASS' ? (
+              <span className="status-badge badge-pass">PASS (FOS {assembly.structural.factor_of_safety})</span>
+            ) : (
+              <span className="status-badge badge-fail">FAIL (FOS {assembly?.structural?.factor_of_safety || '0.69'})</span>
+            )}
+          </span>
         </div>
         <div className="metric-chip alert-chip" onClick={() => setActiveTab('WARNINGS')}>
           <span className="label">UNVERIFIED ITEMS:</span>
@@ -293,6 +303,24 @@ function App() {
               <h2>Main Carrier Deck Geometry</h2>
               <div className="form-grid">
                 <div className="input-field">
+                  <label>Max Overall Width (in) {renderBadge('DESIGN')}</label>
+                  <input
+                    type="number"
+                    value={params.carrier_max_overall_width}
+                    disabled
+                  />
+                  <span className="hint">HARD LIMIT: 38.00" max across flare tips</span>
+                </div>
+                <div className="input-field">
+                  <label>Carrier Frame Width (in) {renderBadge(provenance.carrier_width?.status)}</label>
+                  <input
+                    type="number"
+                    value={params.carrier_width}
+                    onChange={e => handleParamChange('carrier_width', parseFloat(e.target.value) || 0)}
+                  />
+                  <span className="hint">Outside-to-outside of outer longitudinal rails M1 (36.00")</span>
+                </div>
+                <div className="input-field">
                   <label>Carrier Deck Length (in) {renderBadge(provenance.carrier_deck_length?.status)}</label>
                   <input
                     type="number"
@@ -300,15 +328,6 @@ function App() {
                     onChange={e => handleParamChange('carrier_deck_length', parseFloat(e.target.value) || 0)}
                   />
                   <span className="hint">Front stop face to primary rear ramp hinge CL</span>
-                </div>
-                <div className="input-field">
-                  <label>Carrier Overall Width (in) {renderBadge(provenance.carrier_width?.status)}</label>
-                  <input
-                    type="number"
-                    value={params.carrier_width}
-                    onChange={e => handleParamChange('carrier_width', parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="hint">Outside-to-outside of outer longitudinal rails (M1)</span>
                 </div>
                 <div className="input-field">
                   <label>Target Deck Running Height (in) {renderBadge(provenance.deck_height?.status)}</label>
@@ -335,7 +354,16 @@ function App() {
                     value={params.track_flat_width}
                     onChange={e => handleParamChange('track_flat_width', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Width of each wheel track (supports 8.5" rear tires with mud slop)</span>
+                  <span className="hint">11.50" flat width (supports 8.5" rear tires with 3.0" mud slop)</span>
+                </div>
+                <div className="input-field">
+                  <label>Center Cleanout Gap (in)</label>
+                  <input
+                    type="number"
+                    value={params.track_center_gap}
+                    disabled
+                  />
+                  <span className="hint">13.00" clear opening between M2 rails for debris shedding</span>
                 </div>
                 <div className="input-field">
                   <label>Flared Guide Vertical Rise (in)</label>
@@ -344,7 +372,7 @@ function App() {
                     value={params.flared_guide_height}
                     onChange={e => handleParamChange('flared_guide_height', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Vertical containment height along outer edges</span>
+                  <span className="hint">3.00" vertical containment height along outer edges</span>
                 </div>
                 <div className="input-field">
                   <label>Guide Flare Angle (deg)</label>
@@ -353,7 +381,7 @@ function App() {
                     value={params.flare_angle}
                     onChange={e => handleParamChange('flare_angle', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Outward guide bevel angle (typically 45 deg)</span>
+                  <span className="hint">Outward guide bevel angle (45 deg)</span>
                 </div>
                 <div className="input-field">
                   <label>Flare Outward Projection (in)</label>
@@ -362,7 +390,7 @@ function App() {
                     value={params.flare_width}
                     onChange={e => handleParamChange('flare_width', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Horizontal lip to guide off-center tires inward</span>
+                  <span className="hint">1.00" per side (36.0" frame + 2x1.0" = 38.00" MAX)</span>
                 </div>
               </div>
             </div>
@@ -380,7 +408,7 @@ function App() {
                     value={params.ramp_length}
                     onChange={e => handleParamChange('ramp_length', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">One rigid assembly from hinge CL to tip</span>
+                  <span className="hint">61.00" single rigid assembly from hinge CL to tip</span>
                 </div>
                 <div className="input-field">
                   <label>Rear Tire Clearance to Upright Ramp (in) {renderBadge(provenance.ramp_clearance?.status)}</label>
@@ -389,7 +417,7 @@ function App() {
                     value={params.ramp_clearance}
                     onChange={e => handleParamChange('ramp_clearance', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Nominal target clearance behind machine rear tires</span>
+                  <span className="hint">1.0" clearance with rear tires at X=51"-62" (ramp at X=63")</span>
                 </div>
                 <div className="input-field">
                   <label>Hinge Pin Diameter (in)</label>
@@ -398,7 +426,16 @@ function App() {
                     value={params.ramp_hinge_pin_dia}
                     onChange={e => handleParamChange('ramp_hinge_pin_dia', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Cold rolled solid round pin stock (AISI 1018)</span>
+                  <span className="hint">3/4" (0.750") AISI 1018 Cold Finished Round Bar</span>
+                </div>
+                <div className="input-field">
+                  <label>DOM Mechanical Sleeve OD x Wall</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={'1-1/8" OD x 0.172" Wall (0.781" ID)'}
+                  />
+                  <span className="hint">ASTM A513 DOM: 0.031" (1/32") diametral clearance over pin</span>
                 </div>
                 <div className="input-field">
                   <label>Calculated Deployed Slope (deg)</label>
@@ -419,13 +456,31 @@ function App() {
               <h2>Truck Twin Receiver & Stinger Mounts</h2>
               <div className="form-grid">
                 <div className="input-field">
-                  <label>Receiver Centerline Spacing (in) {renderBadge(provenance.receiver_spacing?.status)}</label>
+                  <label>Receiver Outside Span (in) {renderBadge('MEASURED')}</label>
+                  <input
+                    type="number"
+                    value={params.receiver_outside_span}
+                    onChange={e => handleParamChange('receiver_outside_span', parseFloat(e.target.value) || 0)}
+                  />
+                  <span className="hint">40.00" outside-to-outside of truck receiver tubes</span>
+                </div>
+                <div className="input-field unverified-field">
+                  <label>Receiver Socket Outside Width (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
+                  <input
+                    type="number"
+                    value={params.receiver_socket_outside_width}
+                    onChange={e => handleParamChange('receiver_socket_outside_width', parseFloat(e.target.value) || 0)}
+                  />
+                  <span className="warn-text">FIELD VERIFICATION REQ'D: Assumed 2.50" OD</span>
+                </div>
+                <div className="input-field unverified-field">
+                  <label>Receiver Centerline Spacing (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
                   <input
                     type="number"
                     value={params.receiver_spacing}
                     onChange={e => handleParamChange('receiver_spacing', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Fixed dimension on 2015 Ford F-350 flatbed rear tubes</span>
+                  <span className="warn-text">UNVERIFIED: Computed 40.0" span - 2.50" socket OD = 37.50" c-c</span>
                 </div>
                 <div className="input-field">
                   <label>Stinger Structural Section</label>
@@ -444,7 +499,7 @@ function App() {
                     value={params.stinger_insertion_length}
                     onChange={e => handleParamChange('stinger_insertion_length', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="warn-text">FIELD VERIFICATION REQUIRED: Measure truck receiver depth</span>
+                  <span className="warn-text">FIELD VERIFICATION REQUIRED: Measure truck receiver depth (18.0" assumed)</span>
                 </div>
                 <div className="input-field unverified-field">
                   <label>Hitch Pin Hole Setback (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
@@ -456,13 +511,13 @@ function App() {
                   <span className="warn-text">FIELD VERIFICATION REQUIRED: Measure 5/8" hole distance on F-350</span>
                 </div>
                 <div className="input-field">
-                  <label>Carrier Underframe Overlap (in)</label>
+                  <label>Carrier Underframe Overlap (in) {renderBadge('DESIGN')}</label>
                   <input
                     type="number"
                     value={params.stinger_overlap_length}
                     onChange={e => handleParamChange('stinger_overlap_length', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">Welded lap under carrier M1 and C1/C2 beams</span>
+                  <span className="hint">20.00" overlap: extends past C2 (X=18.00") by 2.0" to tie in with G1-2 gusset</span>
                 </div>
               </div>
             </div>
@@ -514,7 +569,104 @@ function App() {
 
               {assembly?.structural && (
                 <div className="structural-summary">
-                  <h3>Calculated Engineering Load Results</h3>
+                  {assembly.structural.status === 'FAIL' ? (
+                    <div className="structural-fail-banner">
+                      <h3>STRUCTURAL INTEGRITY WARNING: STATUS FAIL (FOS = {assembly.structural.factor_of_safety} vs {assembly.structural.target_safety_factor} Target)</h3>
+                      <p>
+                        Stinger cantilever bending stress ({Math.round(assembly.structural.stinger_bending_stress_psi).toLocaleString()} psi) exceeds the {Math.round(assembly.structural.yield_strength_psi).toLocaleString()} psi yield strength of 2x2x1/4 HSS tubes under 2.0g dynamic vertical shock.
+                        DO NOT deploy on public highways without the structural reinforcements listed below.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="alert-box-success" style={{ padding: '12px 16px', marginBottom: '14px' }}>
+                      <strong>STRUCTURAL STATUS: PASS (FOS = {assembly.structural.factor_of_safety})</strong>
+                    </div>
+                  )}
+
+                  <h3>Multi-Case Structural Stress Analysis</h3>
+                  <table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
+                    <thead>
+                      <tr>
+                        <th>Load Case</th>
+                        <th>Dynamic Factor</th>
+                        <th>Dynamic Load</th>
+                        <th>Per-Stinger Moment</th>
+                        <th>Bending Stress</th>
+                        <th>Safety Factor</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assembly.structural.load_cases && Object.entries(assembly.structural.load_cases).map(([key, lc]: [string, any]) => (
+                        <tr key={key} style={key === assembly.structural.controlling_load_case ? { backgroundColor: '#FFF5F5', fontWeight: 'bold' } : {}}>
+                          <td><strong>{key} {key === assembly.structural.controlling_load_case && '(GOVERNING)'}</strong></td>
+                          <td>{lc.description}</td>
+                          <td>{Math.round(lc.load_lb).toLocaleString()} lb</td>
+                          <td>{Math.round(lc.per_stinger_moment_in_lb).toLocaleString()} in-lb</td>
+                          <td>{Math.round(lc.stinger_stress_psi).toLocaleString()} psi</td>
+                          <td><strong>{lc.factor_of_safety}</strong> (target {lc.target_fos})</td>
+                          <td>
+                            <span className={`status-badge ${lc.status === 'PASS' ? 'badge-pass' : 'badge-fail'}`}>
+                              {lc.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {assembly.structural.hinge_check && (
+                    <>
+                      <h3>Ramp Hinge Mechanical & Shear Analysis</h3>
+                      <table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
+                        <thead>
+                          <tr>
+                            <th>Check Component</th>
+                            <th>Design Dimension / Load</th>
+                            <th>Calculated Stress</th>
+                            <th>Safety Factor / Clearance</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td><strong>DOM Mechanical Sleeve Clearance</strong></td>
+                            <td>3/4" Pin (0.750") in 25/32" Sleeve (0.781" ID)</td>
+                            <td>--</td>
+                            <td>{assembly.structural.hinge_check.diametral_clearance_in}" (1/32" diametral)</td>
+                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.clearance_status}</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Hinge Pin Double-Shear (P1)</strong></td>
+                            <td>{Math.round(assembly.structural.hinge_check.dynamic_loading_axle_load_lb).toLocaleString()} lb dynamic surge (4 shear planes)</td>
+                            <td>{Math.round(assembly.structural.hinge_check.pin_shear_stress_psi).toLocaleString()} psi</td>
+                            <td>FOS = {assembly.structural.hinge_check.pin_shear_fos}</td>
+                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.pin_shear_status}</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Hinge Ear Bearing (G3 Plates)</strong></td>
+                            <td>3/8" A36 plate bearing area (0.281 in2 per ear)</td>
+                            <td>{Math.round(assembly.structural.hinge_check.ear_bearing_stress_psi).toLocaleString()} psi</td>
+                            <td>FOS = {assembly.structural.hinge_check.ear_bearing_fos}</td>
+                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.ear_bearing_status}</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+
+                  {assembly.structural.reinforcement_recommendations && assembly.structural.reinforcement_recommendations.length > 0 && (
+                    <div className="recom-box">
+                      <h4>Mandatory Reinforcement Options to Achieve FOS &ge; 2.00:</h4>
+                      <ul>
+                        {assembly.structural.reinforcement_recommendations.map((rec: string, idx: number) => (
+                          <li key={idx}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <h3 style={{ marginTop: '16px' }}>Engineering Calculation Notes</h3>
                   <ul className="results-list">
                     {assembly.structural.notes.map((note: string, idx: number) => (
                       <li key={idx}>{note}</li>

@@ -259,7 +259,7 @@ class DraftingCanvas:
 
 def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
     """Sheet S1: General Arrangement"""
-    dc.draw_border_and_title_block("S1", "GENERAL ARRANGEMENT - PLAN, ELEVATION, & REAR", 1, 9)
+    dc.draw_border_and_title_block("S1", "GENERAL ARRANGEMENT - PLAN, ELEVATION, & ENVELOPE", 1, 9)
     c = dc.c
     
     scale = 2.8
@@ -269,7 +269,7 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     # 1. PLAN VIEW
     c.setFont("Helvetica-Bold", 9)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(ox - 30, 540.0, "VIEW A: GENERAL ARRANGEMENT - PLAN VIEW")
+    c.drawString(ox - 30, 540.0, "VIEW A: GENERAL ARRANGEMENT - PLAN VIEW & MACHINE CLEARANCES")
     
     # Front Datum Reference Line (X=0)
     c.setStrokeColor(colors.HexColor("#D90429"))
@@ -281,25 +281,28 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#D90429"))
     c.drawString(ox + 6, oy + 88, "FRONT DATUM X=0")
     
-    # Twin Receiver Mounts
+    # Twin Receiver Mounts (Stingers S1-L, S1-R)
+    # Stinger overlap 20.0" past X=0 (passes under C2 at X=18"), insertion 18.0" forward into truck receivers
     stinger_w = 2.0 * scale
     stinger_span = params.receiver_spacing * scale
+    ins_l = params.stinger_insertion_length * scale
+    ovl_l = params.stinger_overlap_length * scale
     for y_sign in [-1, 1]:
         sy = oy + y_sign * (stinger_span / 2.0) - (stinger_w / 2.0)
         c.setFillColor(colors.HexColor("#CED4DA"))
         c.setStrokeColor(colors.HexColor("#495057"))
         c.setLineWidth(1.0)
-        c.rect(ox - (18.0 * scale), sy, 18.0 * scale + (18.0 * scale), stinger_w, fill=1, stroke=1)
-        # Hitch Pin Hole
-        hole_x = ox - (18.0 - params.hitch_pin_hole_setback) * scale
+        c.rect(ox - ins_l, sy, ins_l + ovl_l, stinger_w, fill=1, stroke=1)
+        # Hitch Pin Hole (3.0" setback)
+        hole_x = ox - ins_l + (params.hitch_pin_hole_setback * scale)
         c.setFillColor(colors.HexColor("#D90429"))
         c.circle(hole_x, sy + stinger_w/2, 1.8, fill=1, stroke=1)
         
-    # Carrier Deck Outline (38" wide x 63" long)
+    # Carrier Deck Outline (36.00" frame width x 63.00" length; 38.00" max across flare tips)
     deck_l = params.carrier_deck_length * scale
-    deck_w = params.carrier_width * scale
+    deck_w = params.carrier_width * scale # 36.00"
     
-    # Dual Wheel Tracks (12" wide each, 14" center gap)
+    # Dual Wheel Tracks (11.50" flat width each, 13.00" center gap)
     track_w = params.track_flat_width * scale
     c.setFillColor(colors.HexColor("#E9ECEF"))
     c.setStrokeColor(colors.black)
@@ -307,41 +310,51 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.rect(ox, oy - deck_w/2.0, deck_l, track_w, fill=1, stroke=1)
     c.rect(ox, oy + deck_w/2.0 - track_w, deck_l, track_w, fill=1, stroke=1)
     
-    # Open center gap
+    # Open cleanout center gap (13.00" clear)
     c.setFillColor(colors.HexColor("#F8F9FA"))
     c.setStrokeColor(colors.HexColor("#6C757D"))
     c.setLineWidth(0.5)
     c.rect(ox, oy - deck_w/2.0 + track_w, deck_l, deck_w - 2 * track_w, fill=1, stroke=1)
     c.setFont("Helvetica", 6.0)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawCentredString(ox + deck_l/2, oy - 2, "OPEN CLEANOUT GAP (14\" CLEAR)")
+    c.drawCentredString(ox + deck_l/2, oy - 2, "OPEN CLEANOUT GAP (13.0\" CLEAR)")
     
-    # Machine Envelope Footprint (36" wide x 72" practical length)
+    # Flared Guide Outward Projections (1.00" flare per side -> 38.00" MAX outside envelope)
+    flare_w = params.flare_width * scale
+    c.setStrokeColor(colors.HexColor("#495057"))
+    c.setLineWidth(0.8)
+    c.line(ox, oy - deck_w/2.0 - flare_w, ox + deck_l, oy - deck_w/2.0 - flare_w)
+    c.line(ox, oy + deck_w/2.0 + flare_w, ox + deck_l, oy + deck_w/2.0 + flare_w)
+    
+    # Machine Envelope Footprint (35.5" wide x 72.0" practical field length)
+    # Rear tires rest 1.0" nominal ahead of ramp hinge (X=62.0"). Machine projects forward to X = -10.0" over truck bed!
     mach_l = params.machine_length_field * scale
-    mach_w = params.machine_width * scale
+    mach_w = (params.machine_width - 0.5) * scale
+    mach_front_x = ox + ((params.carrier_deck_length - params.ramp_clearance - params.machine_length_field) * scale) # X = -10.0"
     c.setStrokeColor(colors.HexColor("#0077B6"))
     c.setLineWidth(0.8)
     c.setDash([4, 2])
-    c.rect(ox + (2.0 * scale), oy - mach_w/2.0, mach_l, mach_w, fill=0, stroke=1)
+    c.rect(mach_front_x, oy - mach_w/2.0, mach_l, mach_w, fill=0, stroke=1)
     c.setDash([])
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#0077B6"))
-    c.drawString(ox + 8, oy + mach_w/2.0 - 8, "Z-SPRAY JUNIOR ENVELOPE (36\" W x 72\" L)")
+    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 8, "Z-SPRAY JUNIOR ENVELOPE (72\" L x 35.5\" W) - NO COLLISION WITH RAMP")
+    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 15, "FRONT OVERHANGS TRUCK BED 10\" (X = -10.0\" TO X = +62.0\")")
     
-    # Rear Tires resting location
-    rear_tire_x = ox + (deck_l - 1.0 * scale - 11.0 * scale)
+    # Rear Tires resting location (X = 51.0" to 62.0", exactly 1.0" ahead of ramp hinge at X=63.0")
+    rear_tire_x = ox + ((params.carrier_deck_length - params.ramp_clearance - 11.0) * scale)
     for y_sign in [-1, 1]:
         c.setFillColor(colors.HexColor("#343A40"))
-        c.rect(rear_tire_x, oy + y_sign * (13.0 * scale) - (4.25 * scale), 11.0 * scale, 8.5 * scale, fill=1, stroke=1)
+        c.rect(rear_tire_x, oy + y_sign * (12.25 * scale) - (4.25 * scale), 11.0 * scale, 8.5 * scale, fill=1, stroke=1)
         
     # Ramp Hinge Line at X = 63.0"
     hx = ox + deck_l
-    dc.draw_centerline(hx, oy - deck_w/2 - 12, hx, oy + deck_w/2 + 12)
+    dc.draw_centerline(hx, oy - deck_w/2 - 16, hx, oy + deck_w/2 + 16)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(hx + 3, oy + deck_w/2 + 6, "RAMP HINGE (X=63\")")
+    c.drawString(hx + 3, oy + deck_w/2 + 8, "RAMP HINGE (X=63.0\")")
     
-    # Deployed ramp outline
+    # Deployed ramp outline (61.0" length)
     ramp_l = params.ramp_length * scale
     c.setFillColor(colors.HexColor("#E2EAFC"))
     c.setStrokeColor(colors.HexColor("#4361EE"))
@@ -355,14 +368,15 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.drawCentredString(hx + ramp_l/2, oy + deck_w/2 - track_w/2 - 2, "DEPLOYED RAMP (61\")")
     
     # Dimensions on Plan View
-    dc.draw_dim_h(ox, hx, oy + deck_w/2 + 20, f"CARRIER DECK = {fraction_str(params.carrier_deck_length)}")
-    dc.draw_dim_h(hx, hx + ramp_l, oy + deck_w/2 + 20, f"RAMP = {fraction_str(params.ramp_length)}")
-    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 28, f"WIDTH = {fraction_str(params.carrier_width)}")
-    dc.draw_dim_v(oy - deck_w/2, oy - deck_w/2 + track_w, ox - 14, f"TRACK = {fraction_str(params.track_flat_width)}")
-    dc.draw_dim_v(oy - stinger_span/2, oy + stinger_span/2, ox - 44, f"RECEIVER C-C = {fraction_str(params.receiver_spacing)}")
+    dc.draw_dim_h(ox, hx, oy + deck_w/2 + 24, f"CARRIER DECK = {fraction_str(params.carrier_deck_length)}")
+    dc.draw_dim_h(hx, hx + ramp_l, oy + deck_w/2 + 24, f"RAMP = {fraction_str(params.ramp_length)}")
+    dc.draw_dim_v(oy - deck_w/2 - flare_w, oy + deck_w/2 + flare_w, ox - 54, f"MAX OVERALL = {fraction_str(params.carrier_max_overall_width)} (LIMIT)")
+    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 38, f"FRAME WIDTH = {fraction_str(params.carrier_width)}")
+    dc.draw_dim_v(oy - deck_w/2, oy - deck_w/2 + track_w, ox - 22, f"TRACK = {fraction_str(params.track_flat_width)}")
+    dc.draw_dim_v(oy - stinger_span/2, oy + stinger_span/2, ox - 70, f"RECEIVER C-C = {fraction_str(params.receiver_spacing)} [UNVERIFIED]")
     
     # 1.0" Rear Ramp Clearance Callout
-    dc.draw_dim_h(rear_tire_x + 11.0 * scale, hx, oy - deck_w/2 - 12, "1.0\" NOM. CLEARANCE", ext_down=True)
+    dc.draw_dim_h(rear_tire_x + 11.0 * scale, hx, oy - deck_w/2 - 14, "1.0\" NOM. CLEARANCE", ext_down=True)
     
     # 2. SIDE ELEVATION VIEW
     e_oy = 165.0
@@ -376,10 +390,10 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dx = math.sqrt(max(1, params.ramp_length**2 - params.deck_height**2)) * scale
     c.setStrokeColor(colors.HexColor("#6C757D"))
     c.setLineWidth(1.0)
-    c.line(ox - 25, ground_y, hx + dx + 15, ground_y)
+    c.line(ox - 45, ground_y, hx + dx + 15, ground_y)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawString(ox - 25, ground_y + 4, "GROUND LEVEL (Z=-17\")")
+    c.drawString(ox - 45, ground_y + 4, "GROUND LEVEL (Z=-17\")")
     
     # Carrier Frame Tube
     c.setStrokeColor(colors.black)
@@ -390,12 +404,19 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#ADB5BD"))
     c.rect(ox, e_oy, deck_l, 3.0 * scale, fill=1, stroke=1)
     
-    # Upright Ramp
+    # Upright Ramp (90 deg) at X = 63.0"
     c.setFillColor(colors.HexColor("#CED4DA"))
     c.rect(hx - (2.0 * scale), e_oy, 2.0 * scale, ramp_l, fill=1, stroke=1)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#343A40"))
     c.drawString(hx + 4, e_oy + ramp_l - 12, "UPRIGHT POSITION (90°)")
+    
+    # Machine envelope dashed in elevation: X = -10" to +62", height 48"
+    c.setStrokeColor(colors.HexColor("#0077B6"))
+    c.setLineWidth(0.8)
+    c.setDash([3, 2])
+    c.rect(mach_front_x, e_oy, mach_l, 48.0 * scale * 0.45, fill=0, stroke=1)
+    c.setDash([])
     
     # Deployed Ramp Line
     c.setStrokeColor(colors.HexColor("#4361EE"))
@@ -405,20 +426,21 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#4361EE"))
     c.drawString(hx + 35, ground_y + 8, f"DEPLOYED SLOPE = {assembly.get('ramp_angle_deg', 16.2)}°")
     
-    # Stingers underframe & truck extension
+    # Stingers underframe & truck extension (extends 20.0" past X=0 to C2 at X=18")
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.rect(ox - (18.0 * scale), e_oy - (4.0 * scale), 36.0 * scale, 2.0 * scale, fill=1, stroke=1)
+    c.rect(ox - ins_l, e_oy - (4.0 * scale), ins_l + ovl_l, 2.0 * scale, fill=1, stroke=1)
     
     # Elevation Dimensions
-    dc.draw_dim_v(ground_y, e_oy, ox - 35, f"DECK HT = {fraction_str(params.deck_height)}")
-    dc.draw_dim_v(e_oy, e_oy + (3.0 * scale), ox - 18, f"GUIDE = {fraction_str(params.flared_guide_height)}")
+    dc.draw_dim_v(ground_y, e_oy, ox - 45, f"DECK HT = {fraction_str(params.deck_height)}")
+    dc.draw_dim_v(e_oy, e_oy + (3.0 * scale), ox - 20, f"GUIDE = {fraction_str(params.flared_guide_height)}")
     dc.draw_dim_v(e_oy, e_oy + ramp_l, hx + 22, f"RAMP HT = {fraction_str(params.ramp_length)}")
     
-    # Unverified Banner on S1 (cleanly on left bottom)
+    # Unverified & Structural Advisory Banner on S1
     dc.draw_unverified_banner(
-        ox - 30, 45, 360, 36,
-        "STINGER INSERTION (18.0\") & PIN HOLE (3.0\") ARE PROVISIONAL DESIGN ESTIMATES.\n"
-        "MANDATORY: FIELD VERIFY MEASUREMENTS ON FORD F-350 TRUCK RECEIVERS BEFORE CUTTING."
+        ox - 30, 45, 380, 48,
+        "STRUCTURAL STATUS: FAIL [UNASSISTED CANTILEVER FOS = 0.69 < 2.00 TARGET UNDER 2.0g SHOCK].\n"
+        "MANDATORY: INSTALL DIAGONAL STRUTS TO TRUCK HEADACHE RACK OR UNDERFRAME TRUSSING.\n"
+        "FIELD VERIFICATION MANDATORY: CONFIRM RECEIVER SPAN (40.0\" MEASURED) AND INSERTION DEPTH."
     )
 
 def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
@@ -445,7 +467,7 @@ def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.drawString(ox + 6, oy + 235, "FRONT DATUM: X = 0.00\" (TRUCK FACE)")
     
     deck_l = params.carrier_deck_length * scale
-    deck_w = params.carrier_width * scale
+    deck_w = params.carrier_width * scale # 36.00"
     m_thk = 2.0 * scale
     
     # Longitudinal Frame Tubes M1-L and M1-R
@@ -455,22 +477,22 @@ def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.rect(ox, oy - deck_w/2.0, deck_l, m_thk, fill=1, stroke=1)
     c.rect(ox, oy + deck_w/2.0 - m_thk, deck_l, m_thk, fill=1, stroke=1)
     
-    # Inner Track Support Angles M2-L, M2-R
+    # Inner Track Support Angles M2-L, M2-R (Y = +/- 6.50", cleanout opening 13.00")
+    m2_y_offset = (params.track_center_gap / 2.0) * scale # 6.50" * scale
     c.setFillColor(colors.HexColor("#DEE2E6"))
-    c.rect(ox, oy - (7.0 * scale) - m_thk, deck_l, m_thk, fill=1, stroke=1)
-    c.rect(ox, oy + (7.0 * scale), deck_l, m_thk, fill=1, stroke=1)
+    c.rect(ox, oy - m2_y_offset - m_thk, deck_l, m_thk, fill=1, stroke=1)
+    c.rect(ox, oy + m2_y_offset, deck_l, m_thk, fill=1, stroke=1)
     
-    # Crossmembers C1-C4
-    cm_locs = [
-        ("C1", 1.00, "C1"),
-        ("C2", 18.00, "C2"),
-        ("C3", 38.00, "C3"),
-        ("C4", 62.00, "C4")
-    ]
-    c_span = (params.carrier_width - 4.0) * scale
+    # Crossmembers C1-C4 (Extracted parametrically from assembly members)
+    cm_members = [m for m in assembly.get("members", []) if getattr(m, "assembly", "") == "MAIN_CARRIER" and getattr(m, "piece_mark", "").startswith("C")]
+    cm_locs = [(getattr(m, "piece_mark", ""), getattr(m, "start_pt", None).x if getattr(m, "start_pt", None) else 0.0) for m in cm_members]
+    if not cm_locs:
+        cm_locs = [("C1", 1.00), ("C2", 18.00), ("C3", 38.00), ("C4", 62.00)]
+        
+    c_span = (params.carrier_width - 4.0) * scale # 32.00"
     c_span_y = oy - deck_w/2.0 + m_thk
     
-    for mark, x_loc, desc in cm_locs:
+    for mark, x_loc in cm_locs:
         cx = ox + (x_loc * scale) - (m_thk / 2.0)
         c.setFillColor(colors.HexColor("#CED4DA"))
         c.setStrokeColor(colors.black)
@@ -478,10 +500,11 @@ def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         c.rect(cx, c_span_y, m_thk, c_span, fill=1, stroke=1)
         dc.draw_centerline(cx + m_thk/2, c_span_y - 6, cx + m_thk/2, c_span_y + c_span + 6)
         
-    # Front Stop Angles G5
+    # Front Stop Angles G5 (11.50" flat wheel track chock)
+    g5_len = params.track_flat_width * scale
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.rect(ox + (2.0 * scale), oy - deck_w/2.0, 1.5 * scale, 12.0 * scale, fill=1, stroke=1)
-    c.rect(ox + (2.0 * scale), oy + deck_w/2.0 - (12.0 * scale), 1.5 * scale, 12.0 * scale, fill=1, stroke=1)
+    c.rect(ox + (2.0 * scale), oy - deck_w/2.0, 1.5 * scale, g5_len, fill=1, stroke=1)
+    c.rect(ox + (2.0 * scale), oy + deck_w/2.0 - g5_len, 1.5 * scale, g5_len, fill=1, stroke=1)
     
     # Front Chain Bracket G4
     c.setFillColor(colors.HexColor("#343A40"))
@@ -498,9 +521,9 @@ def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_h(ox, ox + deck_l, base_y + 56.0, f"OVERALL DECK = {fraction_str(params.carrier_deck_length)}", ext_down=True)
     
     # Transverse Dimensions on Left
-    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 38, f"OVERALL WIDTH = {fraction_str(params.carrier_width)}")
-    dc.draw_dim_v(oy - deck_w/2 + m_thk, oy + deck_w/2 - m_thk, ox - 24, f"CROSSMEMBER = {fraction_str(params.carrier_width - 4.0)}")
-    dc.draw_dim_v(oy - deck_w/2, oy - (7.0 * scale), ox - 12, f"TRACK = {fraction_str(params.track_flat_width)}")
+    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 38, f"FRAME WIDTH = {fraction_str(params.carrier_width)} (38\" MAX FLARE)")
+    dc.draw_dim_v(oy - deck_w/2 + m_thk, oy + deck_w/2 - m_thk, ox - 24, f"CROSSMEMBER C1-C4 = {fraction_str(params.carrier_width - 4.0)}")
+    dc.draw_dim_v(oy - deck_w/2, oy - m2_y_offset, ox - 12, f"TRACK = {fraction_str(params.track_flat_width)}")
     
     # Piece Mark Balloons
     dc.draw_balloon(ox + 70, oy + deck_w/2 + 8, "M1-R", leader_to=(ox + 70, oy + deck_w/2 - m_thk/2))
@@ -547,15 +570,19 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#ADB5BD"))
     c.rect(ox, oy, deck_l, guide_h, fill=1, stroke=1)
     
-    # Stingers underframe
+    # Stingers underframe (overlap = 20.0" extends under C2 at X=18.0")
     stinger_ins = params.stinger_insertion_length * scale
     stinger_ovl = params.stinger_overlap_length * scale
     c.setFillColor(colors.HexColor("#CED4DA"))
     c.rect(ox - stinger_ins, oy - (2 * m_thk), stinger_ins + stinger_ovl, m_thk, fill=1, stroke=1)
     
-    # Stinger Gusset G1
+    # Front Stinger Gusset G1-1 at C1 (X=1")
     c.setFillColor(colors.HexColor("#495057"))
     dc.draw_polygon([(ox, oy - m_thk), (ox + (8.0 * scale), oy - m_thk), (ox, oy - (2 * m_thk))], fill=1, stroke=1)
+    
+    # Rear Stinger Gusset G1-2 at C2 (X=18")
+    c2_x = ox + (18.0 * scale)
+    dc.draw_polygon([(c2_x, oy - m_thk), (c2_x - (8.0 * scale), oy - m_thk), (c2_x, oy - (2 * m_thk))], fill=1, stroke=1)
     
     # Hinge Sleeves at Rear
     c.setFillColor(colors.HexColor("#343A40"))
@@ -566,7 +593,7 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_v(oy - 2*m_thk, oy, ox - stinger_ins - 32, "4\" TUBE+STINGER")
     dc.draw_dim_v(oy, oy + guide_h, ox + deck_l + 20, f"GUIDE = {fraction_str(params.flared_guide_height)}")
     dc.draw_dim_h(ox - stinger_ins, ox, oy - 2*m_thk - 22, f"INSERTION = {fraction_str(params.stinger_insertion_length)} [UNVERIFIED]")
-    dc.draw_dim_h(ox, ox + stinger_ovl, oy - 2*m_thk - 22, f"OVERLAP = {fraction_str(params.stinger_overlap_length)}")
+    dc.draw_dim_h(ox, ox + stinger_ovl, oy - 2*m_thk - 22, f"OVERLAP = {fraction_str(params.stinger_overlap_length)} (PAST C2)")
     dc.draw_dim_h(ox, ox + deck_l, oy + guide_h + 16, f"OVERALL DECK = {fraction_str(params.carrier_deck_length)}")
     
     # SECTION A-A (Enlarged Detail)
@@ -576,7 +603,7 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     
     c.setFont("Helvetica-Bold", 8.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(sec_x, sec_y + 105, "SECTION A-A: WHEEL TRACK & FORMED 45-DEG FLARED GUIDE")
+    c.drawString(sec_x, sec_y + 105, "SECTION A-A: WHEEL TRACK & 1.0\" FORMED 45-DEG FLARED GUIDE")
     
     # Outer Tube M1
     c.setFillColor(colors.HexColor("#DEE2E6"))
@@ -585,7 +612,7 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.rect(sec_x, sec_y, 2.0 * sec_scale, 2.0 * sec_scale, fill=1, stroke=1)
     
     # Inner Support Angle M2
-    track_span = params.track_flat_width * sec_scale
+    track_span = params.track_flat_width * sec_scale # 11.50" flat width
     c.rect(sec_x + track_span - (2.0 * sec_scale), sec_y, 2.0 * sec_scale, 2.0 * sec_scale, fill=1, stroke=1)
     
     # Grating line
@@ -593,12 +620,12 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setLineWidth(1.5)
     c.line(sec_x, sec_y + 2.0 * sec_scale, sec_x + track_span, sec_y + 2.0 * sec_scale)
     
-    # Formed Guide
+    # Formed Guide (3.0" vertical + 1.0" outward horizontal flare -> total 38.00" max completed width)
     g_start_x = sec_x
     g_start_y = sec_y + 2.0 * sec_scale
     g_vert_y = g_start_y + (3.0 * sec_scale)
-    g_flare_x = g_start_x - (1.5 * sec_scale)
-    g_flare_y = g_vert_y + (1.5 * sec_scale)
+    g_flare_x = g_start_x - (1.0 * sec_scale) # 1.00" flare
+    g_flare_y = g_vert_y + (1.0 * sec_scale)
     
     c.setStrokeColor(colors.black)
     c.setLineWidth(2.0)
@@ -608,7 +635,7 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     # Section Dimensions
     dc.draw_dim_h(sec_x, sec_x + track_span, sec_y - 14, f"TRACK FLAT WIDTH = {fraction_str(params.track_flat_width)}")
     dc.draw_dim_v(g_start_y, g_vert_y, sec_x + track_span + 14, "3.0\" VERTICAL")
-    dc.draw_dim_h(g_flare_x, g_start_x, g_flare_y + 8, "1.5\" FLARE")
+    dc.draw_dim_h(g_flare_x, g_start_x, g_flare_y + 8, "1.0\" FLARE (38\" MAX OVERALL)")
     
     dc.draw_balloon(sec_x - 25, g_vert_y + 4, "FG1-L", leader_to=(g_start_x, g_vert_y))
     dc.draw_balloon(sec_x - 18, sec_y + 10, "M1-L", leader_to=(sec_x, sec_y + 10))
@@ -627,19 +654,28 @@ def draw_sheet_s4(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(ox - 150, 535.0, "TWIN STINGER MOUNTING INTERFACE - PLAN & HOLE LOCATIONS")
     
-    spacing = params.receiver_spacing * scale
-    tube_w = params.receiver_tube_width * scale
-    ins_l = params.stinger_insertion_length * scale
-    ovl_l = params.stinger_overlap_length * scale
-    tot_l = ins_l + ovl_l
+    spacing = params.receiver_spacing * scale # 37.50" c-c UNVERIFIED
+    tube_w = params.receiver_tube_width * scale # 2.00" square tube
+    ins_l = params.stinger_insertion_length * scale # 18.00"
+    ovl_l = params.stinger_overlap_length * scale # 20.00"
+    tot_l = ins_l + ovl_l # 38.00"
     
-    # Front Datum Line
+    # Front Datum Line (X=0)
     dc.draw_centerline(ox, oy - spacing/2 - 25, ox, oy + spacing/2 + 25)
     c.setFont("Helvetica-Bold", 6.5)
     c.setFillColor(colors.HexColor("#D90429"))
     c.drawCentredString(ox, oy + spacing/2 + 30, "FRONT CARRIER FACE (X = 0.0\")")
     
-    # Stingers S1-L and S1-R
+    # Crossmembers C1 (X=1.0") and C2 (X=18.0")
+    c.setStrokeColor(colors.HexColor("#0D1B2A"))
+    c.setLineWidth(1.2)
+    c.setFillColor(colors.HexColor("#ADB5BD"))
+    c1_x = ox + (1.0 * scale)
+    c2_x = ox + (18.0 * scale)
+    c.rect(c1_x - (scale), oy - spacing/2 - tube_w/2, 2.0 * scale, spacing + tube_w, fill=1, stroke=1)
+    c.rect(c2_x - (scale), oy - spacing/2 - tube_w/2, 2.0 * scale, spacing + tube_w, fill=1, stroke=1)
+    
+    # Stingers S1-L and S1-R (extends from X=-18" to X=+20", passing under C2 at X=18")
     for y_sign in [-1, 1]:
         sy = oy + y_sign * (spacing / 2.0) - (tube_w / 2.0)
         c.setFillColor(colors.HexColor("#CED4DA"))
@@ -648,39 +684,40 @@ def draw_sheet_s4(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         c.rect(ox - ins_l, sy, tot_l, tube_w, fill=1, stroke=1)
         dc.draw_centerline(ox - ins_l - 10, sy + tube_w/2, ox + ovl_l + 10, sy + tube_w/2)
         
-        # 5/8" Pin hole
+        # 5/8" Hitch Pin hole (3.0" setback from tip)
         pin_x = ox - ins_l + (params.hitch_pin_hole_setback * scale)
         c.setFillColor(colors.HexColor("#D90429"))
         c.circle(pin_x, sy + tube_w/2, 2.5, fill=1, stroke=1)
         
-        # Gussets G1
+        # Front Gusset G1-1 at C1 (X=1.0")
         c.setFillColor(colors.HexColor("#6C757D"))
         dc.draw_polygon([(ox, sy), (ox + (8.0 * scale), sy), (ox, sy + (y_sign * -4.0 * scale))], fill=1, stroke=1)
         
-    # C1 and C2 Crossmembers
-    c.setStrokeColor(colors.HexColor("#0D1B2A"))
-    c.setLineWidth(1.2)
-    c.setFillColor(colors.HexColor("#ADB5BD"))
-    c.rect(ox, oy - spacing/2 - tube_w/2, 2.0 * scale, spacing + tube_w, fill=1, stroke=1)
-    c.rect(ox + (18.0 * scale) - 2.0*scale, oy - spacing/2 - tube_w/2, 2.0 * scale, spacing + tube_w, fill=1, stroke=1)
+        # Rear Gusset G1-2 at C2 (X=18.0")
+        dc.draw_polygon([(c2_x, sy), (c2_x - (8.0 * scale), sy), (c2_x, sy + (y_sign * -4.0 * scale))], fill=1, stroke=1)
     
     # Dimensions
-    dc.draw_dim_v(oy - spacing/2, oy + spacing/2, ox - ins_l - 25, f"RECEIVER C-C = {fraction_str(params.receiver_spacing)} (EXACT)")
-    dc.draw_dim_v(oy - spacing/2 - tube_w/2, oy + spacing/2 + tube_w/2, ox - ins_l - 42, f"OUTSIDE SPAN = {fraction_str(params.receiver_outside_span)} (EXACT)")
+    dc.draw_dim_v(oy - spacing/2, oy + spacing/2, ox - ins_l - 22, f"RECEIVER C-C = {fraction_str(params.receiver_spacing)} [UNVERIFIED]")
+    dc.draw_dim_v(oy - spacing/2 - (1.25 * scale), oy + spacing/2 + (1.25 * scale), ox - ins_l - 42, f"OUTSIDE SPAN = {fraction_str(params.receiver_outside_span)} (MEASURED)")
     dc.draw_dim_h(ox - ins_l, ox, oy + spacing/2 + 16, f"INSERTION = {fraction_str(params.stinger_insertion_length)} [UNVERIFIED]")
     dc.draw_dim_h(ox - ins_l, ox - ins_l + (params.hitch_pin_hole_setback * scale), oy - spacing/2 - 30, f"PIN HOLE = {fraction_str(params.hitch_pin_hole_setback)} [UNVERIFIED]")
-    dc.draw_dim_h(ox, ox + ovl_l, oy + spacing/2 + 16, f"OVERLAP = {fraction_str(params.stinger_overlap_length)}")
+    dc.draw_dim_h(ox, ox + ovl_l, oy + spacing/2 + 16, f"OVERLAP = {fraction_str(params.stinger_overlap_length)} (TIES INTO C2)")
+    
+    # Dimension from X=0 to C2
+    dc.draw_dim_h(ox, c2_x, oy - spacing/2 - 16, "C2 CL = 18.0\"")
     
     dc.draw_balloon(ox + 50, oy - spacing/2 + 25, "S1-L", leader_to=(ox + 35, oy - spacing/2 + tube_w/2))
     dc.draw_balloon(ox + 50, oy + spacing/2 - 25, "S1-R", leader_to=(ox + 35, oy + spacing/2 - tube_w/2))
-    dc.draw_balloon(ox + 18, oy - spacing/2 - 16, "G1", leader_to=(ox + 8, oy - spacing/2 - 2))
+    dc.draw_balloon(ox + 18, oy - spacing/2 - 16, "G1-1", leader_to=(ox + 8, oy - spacing/2 - 2))
+    dc.draw_balloon(c2_x - 18, oy - spacing/2 - 16, "G1-2", leader_to=(c2_x - 8, oy - spacing/2 - 2))
     
     # Clean Unverified Warning Banner at bottom left (Zero overlap with title block)
     dc.draw_unverified_banner(
-        50.0, 45.0, 415.0, 52.0,
-        "1. CONFIRM TRUCK RECEIVER INTERNAL STOP DISTANCE: MEASURE DEPTH FROM RECEIVER FACE TO PREVENT BOTTOMING OUT.\n"
-        "2. CONFIRM HITCH PIN HOLE LOCATION (MEASURE FROM RECEIVER FACE TO 5/8\" HOLE CENTERLINE ON FORD F-350).\n"
-        "3. PROVISIONAL 18\" INSERTION AND 3\" PIN HOLE DISTANCES MUST BE FIELD-CONFIRMED PRIOR TO DRILLING."
+        50.0, 45.0, 420.0, 54.0,
+        "1. MEASURED TRUCK SPAN: 40.00\" OUTSIDE-TO-OUTSIDE (2015 FORD F-350 FLATBED).\n"
+        "2. UNVERIFIED C-C SPACING: 37.50\" BASED ON ASSUMED 2.50\" OD SOCKET (1/4\" WALL BOX).\n"
+        "3. FIELD VERIFICATION MANDATORY: MEASURE ACTUAL TUBE WALL THICKNESS & PIN HOLE SETBACK.\n"
+        "4. STINGER OVERLAP EXTENDS 20.00\" PAST FRONT DATUM TO TIE DIRECTLY INTO C2 AT X=18.0\"."
     )
 
 def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
@@ -703,7 +740,7 @@ def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.drawString(ox + 6, oy + 235, "HINGE DATUM (X = 0.0\" RAMP / X = 63.0\" CARRIER)")
     
     ramp_l = params.ramp_length * scale
-    deck_w = params.carrier_width * scale
+    deck_w = params.carrier_width * scale # 36.00"
     m_thk = 2.0 * scale
     
     # Outer Side Tubes R1-L and R1-R
@@ -713,12 +750,13 @@ def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.rect(ox, oy - deck_w/2.0, ramp_l, m_thk, fill=1, stroke=1)
     c.rect(ox, oy + deck_w/2.0 - m_thk, ramp_l, m_thk, fill=1, stroke=1)
     
-    # Inner Support Rails R2-L and R2-R
+    # Inner Support Rails R2-L and R2-R (Y = +/- 6.50", cleanout gap 13.00")
+    m2_y_offset = (params.track_center_gap / 2.0) * scale
     c.setFillColor(colors.HexColor("#DEE2E6"))
-    c.rect(ox, oy - (7.0 * scale) - m_thk, ramp_l, m_thk, fill=1, stroke=1)
-    c.rect(ox, oy + (7.0 * scale), ramp_l, m_thk, fill=1, stroke=1)
+    c.rect(ox, oy - m2_y_offset - m_thk, ramp_l, m_thk, fill=1, stroke=1)
+    c.rect(ox, oy + m2_y_offset, ramp_l, m_thk, fill=1, stroke=1)
     
-    # Ramp Crossmembers RC1 to RC5
+    # Ramp Crossmembers RC1 to RC5 (32.00" span between side tubes)
     rc_locs = [
         ("RC1", 0.50, "RC1"),
         ("RC2", 15.00, "RC2"),
@@ -726,7 +764,7 @@ def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         ("RC4", 45.00, "RC4"),
         ("RC5", 60.00, "RC5")
     ]
-    rc_span = (params.carrier_width - 4.0) * scale
+    rc_span = (params.carrier_width - 4.0) * scale # 32.00"
     rc_span_y = oy - deck_w/2.0 + m_thk
     
     for mark, dist, desc in rc_locs:
@@ -750,8 +788,8 @@ def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_h(ox, ox + ramp_l, base_y + 56.0, f"TOTAL RAMP = {fraction_str(params.ramp_length)}", ext_down=True)
     
     # Transverse Dims
-    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 35, f"OVERALL WIDTH = {fraction_str(params.carrier_width)}")
-    dc.draw_dim_v(oy - deck_w/2, oy - (7.0 * scale), ox - 18, f"TRACK = {fraction_str(params.track_flat_width)}")
+    dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 35, f"FRAME WIDTH = {fraction_str(params.carrier_width)}")
+    dc.draw_dim_v(oy - deck_w/2, oy - m2_y_offset, ox - 18, f"TRACK = {fraction_str(params.track_flat_width)}")
     
     # Balloons
     dc.draw_balloon(ox + 55, oy + deck_w/2 + 8, "R1-R", leader_to=(ox + 55, oy + deck_w/2 - m_thk/2))
@@ -785,10 +823,10 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dx = math.sqrt(max(1, ramp_l**2 - deck_h**2))
     c.setStrokeColor(colors.HexColor("#6C757D"))
     c.setLineWidth(1.0)
-    c.line(ox - 30, ground_y, ox + dx + 100, ground_y)
+    c.line(ox - 30, ground_y, ox + dx + 15, ground_y)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawString(ox + dx + 12, ground_y + 4, "GROUND LEVEL (Z = -17\")")
+    c.drawString(ox + dx + 20, ground_y - 2, "GROUND LEVEL (Z = -17\")")
     
     # Deployed Ramp Member
     c.setStrokeColor(colors.black)
@@ -808,14 +846,14 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_v(oy, oy + ramp_l, ox - 20, f"UPRIGHT = {fraction_str(params.ramp_length)}")
     dc.draw_dim_h(ox, ox + dx, ground_y - 16, f"GROUND HORIZ SPAN = {fraction_str(dx/scale)}")
     
-    # ENLARGED HINGE DETAIL VIEW (Clean in lower-right)
-    det_x = 420.0
-    det_y = 140.0
+    # ENLARGED HINGE DETAIL VIEW (Cleanly positioned in open upper-right quadrant)
+    det_x = 510.0
+    det_y = 370.0
     det_scale = 13.0
     
     c.setFont("Helvetica-Bold", 8.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(det_x - 30, det_y + 110, "DETAIL B: HINGE SLEEVE & 3/4\" PIN ARRANGEMENT")
+    c.drawString(det_x - 30, det_y + 80, "DETAIL B: 1-1/8\" DOM SLEEVE & 3/4\" PIN ARRANGEMENT")
     
     # Carrier rear tube (2x2)
     c.setFillColor(colors.HexColor("#DEE2E6"))
@@ -826,18 +864,28 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#ADB5BD"))
     c.rect(det_x, det_y + 0.25*det_scale, 1.5 * det_scale, 1.5 * det_scale, fill=1, stroke=1)
     
-    # DOM Sleeve
+    # DOM Sleeve (1-1/8" OD x 0.172" wall, 0.781" ID)
     c.setFillColor(colors.HexColor("#495057"))
-    c.circle(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale, 0.5625 * det_scale, fill=1, stroke=1)
+    c.circle(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale, 0.5625 * det_scale, fill=1, stroke=1) # OD = 1.125"
+    c.setFillColor(colors.white)
+    c.circle(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale, 0.3905 * det_scale, fill=1, stroke=1) # ID = 0.781"
     
-    # 3/4" Pin
+    # 3/4" Pin (0.750" OD -> 0.031" diametral clearance)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.circle(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale, 0.375 * det_scale, fill=1, stroke=1)
+    c.circle(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale, 0.375 * det_scale, fill=1, stroke=1) # OD = 0.750"
     
     dc.draw_dim_h(det_x, det_x + 1.5*det_scale, det_y - 12, "1.5\" EAR PROJECTION")
-    dc.draw_balloon(det_x + 35, det_y + 70, "P1", leader_to=(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale))
-    dc.draw_balloon(det_x - 30, det_y + 40, "C4", leader_to=(det_x - 1.0 * det_scale, det_y + 1.0 * det_scale))
-    dc.draw_weld_callout(det_x + 50, det_y + 15, "1/4 FILLET ALL AROUND SLEEVE", leader_to=(det_x + 0.75 * det_scale + 4, det_y + 1.0 * det_scale - 4))
+    dc.draw_balloon(det_x + 35, det_y + 55, "P1", leader_to=(det_x + 0.75 * det_scale, det_y + 1.0 * det_scale))
+    dc.draw_balloon(det_x - 35, det_y + 35, "C4", leader_to=(det_x - 1.0 * det_scale, det_y + 1.0 * det_scale))
+    dc.draw_weld_callout(det_x + 45, det_y + 15, "1/4 FILLET ALL AROUND SLEEVE", leader_to=(det_x + 0.75 * det_scale + 4, det_y + 1.0 * det_scale - 4))
+    
+    # Detail B Engineering Callouts
+    c.setFont("Helvetica-Bold", 6.0)
+    c.setFillColor(colors.HexColor("#0D1B2A"))
+    c.drawString(det_x - 30, det_y - 25, "SLEEVE: 1-1/8\" OD x 0.172\" WALL DOM (0.781\" ID, 25/32\")")
+    c.drawString(det_x - 30, det_y - 35, "PIN: 3/4\" (0.750\") CF BAR -> 0.031\" (1/32\") DIAMETRAL CLEARANCE")
+    c.setFillColor(colors.HexColor("#2B9348"))
+    c.drawString(det_x - 30, det_y - 45, "PIN DOUBLE SHEAR FOS = 49.1 (PASS) | EAR BEARING FOS = 27.1 (PASS)")
 
 def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
     """Sheet S7: Individual Fabricated Parts, Gussets, & Brackets"""
@@ -856,7 +904,7 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(g1_x, g1_y + 75, "PART G1: STINGER GUSSET (QTY: 4)")
     c.setFont("Helvetica", 6.0)
-    c.drawString(g1_x, g1_y + 66, "1/4\" A36 PLATE - SHEAR CUT")
+    c.drawString(g1_x, g1_y + 66, "1/4\" A36 PLATE - (2 FRONT AT C1, 2 REAR AT C2)")
     
     c.setFillColor(colors.HexColor("#E9ECEF"))
     c.setStrokeColor(colors.black)
@@ -870,6 +918,7 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     g2_x = 285.0
     g2_y = 370.0
     c.setFont("Helvetica-Bold", 8.0)
+    c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(g2_x, g2_y + 75, "PART G2-L/R: REAR LIGHT GUARD (QTY: 2)")
     c.setFont("Helvetica", 6.0)
     c.drawString(g2_x, g2_y + 66, "3/16\" A36 PLATE - OVAL OPENING")
@@ -895,9 +944,10 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     g3_x = 495.0
     g3_y = 370.0
     c.setFont("Helvetica-Bold", 8.0)
+    c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(g3_x, g3_y + 75, "PART G3: HINGE EAR (QTY: 4)")
     c.setFont("Helvetica", 6.0)
-    c.drawString(g3_x, g3_y + 66, "3/8\" A36 PLATE - 25/32\" HOLE")
+    c.drawString(g3_x, g3_y + 66, "3/8\" A36 PLATE - 25/32\" (0.781\") HOLE")
     
     ew = 2.5 * scale/2
     eh = 4.5 * scale/2
@@ -914,6 +964,7 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     g4_x = 95.0
     g4_y = 180.0
     c.setFont("Helvetica-Bold", 8.0)
+    c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(g4_x, g4_y + 75, "PART G4: CHAIN TIE-DOWN (QTY: 1)")
     c.setFont("Helvetica", 6.0)
     c.drawString(g4_x, g4_y + 66, "3/8\" A36 PLATE - 1.00\" HOLE")
@@ -932,13 +983,14 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     g5_x = 285.0
     g5_y = 180.0
     c.setFont("Helvetica-Bold", 8.0)
+    c.setFillColor(colors.HexColor("#001D3D"))
     c.drawString(g5_x, g5_y + 75, "PART G5-L/R: WHEEL STOP (QTY: 2)")
     c.setFont("Helvetica", 6.0)
-    c.drawString(g5_x, g5_y + 66, "L 2x2x1/4 A36 - 12.0\" CUT")
+    c.drawString(g5_x, g5_y + 66, "L 2x2x1/4 A36 - 11.50\" CUT")
     
     c.setFillColor(colors.HexColor("#E9ECEF"))
-    c.rect(g5_x, g5_y, 12.0 * scale/3, 2.0 * scale/3, fill=1, stroke=1)
-    dc.draw_dim_h(g5_x, g5_x + 12.0 * scale/3, g5_y - 12, "12.0\" CUT")
+    c.rect(g5_x, g5_y, 11.5 * scale/3, 2.0 * scale/3, fill=1, stroke=1)
+    dc.draw_dim_h(g5_x, g5_x + 11.5 * scale/3, g5_y - 12, "11.50\" CUT")
     dc.draw_balloon(g5_x + 15, g5_y + 12, "G5")
 
 def draw_sheet_s8(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
@@ -1016,15 +1068,19 @@ def draw_sheet_s8(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         
         y -= 11
         
-    # Total Weight Summary Box cleanly on the left (Zero overlap with title block)
-    c.setFillColor(colors.HexColor("#E0AAFF"))
-    c.rect(ox, 50.0, 410.0, 45.0, fill=1, stroke=1)
-    c.setFillColor(colors.HexColor("#240046"))
+    # Structural Status and Weight Summary Box (Zero overlap with title block)
+    c.setFillColor(colors.HexColor("#FFF3CD"))
+    c.setStrokeColor(colors.HexColor("#856404"))
+    c.rect(ox, 50.0, 420.0, 52.0, fill=1, stroke=1)
+    
+    c.setFillColor(colors.HexColor("#D90429"))
     c.setFont("Helvetica-Bold", 7.5)
-    c.drawString(ox + 10, 80.0, f"TOTAL ESTIMATED CARRIER STEEL DEAD WEIGHT: {tot_wt:.1f} LBS")
+    c.drawString(ox + 8, 90.0, "STRUCTURAL ADVISORY: STATUS [FAIL] - CANTILEVER FOS = 0.69 < 2.00 TARGET")
+    c.setFillColor(colors.HexColor("#0D1B2A"))
     c.setFont("Helvetica", 6.5)
-    c.drawString(ox + 10, 68.0, "Includes all structural tubes, angles, plate gussets, light guards, and grating.")
-    c.drawString(ox + 10, 56.0, "Total payload with full liquid & fertilizer: 1,148.2 lbs | Suspended mass: ~1,465 lbs.")
+    c.drawString(ox + 8, 78.0, f"CARRIER DEAD WT: {tot_wt:.1f} LB | WORKING PAYLOAD: 1,148.2 LB | TOTAL SUSPENDED: ~1,465 LB")
+    c.drawString(ox + 8, 67.0, "Stinger bending under 2.0g dynamic shock = 66,210 psi (exceeds 46,000 psi yield).")
+    c.drawString(ox + 8, 56.0, "MANDATORY: Add diagonal struts to truck headache rack or underframe truss before highway transit.")
 
 def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any], stock_data: Dict[str, Any]):
     """Sheet S9: Stock Cutting Plan & Material Purchasing Requirements"""
@@ -1048,6 +1104,7 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
             
         stk_id = stick.get("stick_id", f"STK-{i+1:02d}")
         sec = stick.get("section", "")
+        grd = stick.get("grade", "A500 Gr B")
         stk_len = stick.get("stock_length", 240.0)
         parts = stick.get("parts", [])
         eff = stick.get("efficiency_pct", 0.0)
@@ -1055,7 +1112,7 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         
         c.setFont("Helvetica-Bold", 6.5)
         c.setFillColor(colors.HexColor("#0D1B2A"))
-        c.drawString(ox, y, f"{stk_id}: {sec} - {fraction_str(stk_len)} ({stk_len/12:.0f}-ft Stock) | Yield: {eff:.1f}% | Remnant Scrap: {fraction_str(scrap)}")
+        c.drawString(ox, y, f"{stk_id}: {sec} ({grd}) - {fraction_str(stk_len)} ({stk_len/12:.0f}-ft Stock) | Yield: {eff:.1f}% | Remnant Scrap: {fraction_str(scrap)}")
         
         y -= 15
         # Full stock bar
@@ -1085,20 +1142,44 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         y -= 22
         
     # Purchasing Summary Box (Cleanly on left bottom, zero overlap with title block)
-    purch_y = 45.0
+    purch_y = 28.0
     c.setFillColor(colors.HexColor("#F8F9FA"))
     c.setStrokeColor(colors.HexColor("#003566"))
-    c.rect(ox, purch_y, 410.0, 75.0, fill=1, stroke=1)
+    c.rect(ox, purch_y, 400.0, 66.0, fill=1, stroke=1)
     c.setFont("Helvetica-Bold", 7.0)
     c.setFillColor(colors.HexColor("#003566"))
-    c.drawString(ox + 8, purch_y + 63, "MATERIAL PURCHASING REQUIREMENTS (RAW STEEL ORDER LIST)")
+    c.drawString(ox + 8, purch_y + 54, "COMPREHENSIVE MATERIAL PURCHASING SCHEDULE (ORDER LIST)")
     
-    py = purch_y + 50
-    c.setFont("Helvetica", 6.0)
+    # Column 1: Linear Stock
+    c.setFont("Helvetica-Bold", 5.5)
+    c.setFillColor(colors.HexColor("#333333"))
+    c.drawString(ox + 8, purch_y + 44, "LINEAR STOCK:")
+    py1 = purch_y + 35
+    c.setFont("Helvetica", 5.2)
     c.setFillColor(colors.black)
-    for prow in stock_data.get("purchase_list", [])[:6]:
-        c.drawString(ox + 8, py, f"- {prow.get('quantity')} Stick(s) {prow.get('section')} x {prow.get('stick_length')/12:.0f}-FT ({prow.get('grade')}) - Total: {prow.get('total_purchased_weight')} lb")
-        py -= 9
+    for prow in [p for p in stock_data.get("purchase_list", []) if p.get("category") == "LINEAR_STOCK"][:5]:
+        sec = prow.get("section", "")
+        qty = prow.get("quantity", 1)
+        unit = prow.get("unit_size", "")
+        wt = prow.get("total_purchased_weight", 0.0)
+        c.drawString(ox + 8, py1, f"• {qty}x {sec} ({unit}) - {wt:.1f} lb")
+        py1 -= 7.5
+        
+    # Column 2: Plate, Grating, & Hardware
+    c.setFont("Helvetica-Bold", 5.5)
+    c.setFillColor(colors.HexColor("#333333"))
+    c.drawString(ox + 205, purch_y + 44, "PLATE, GRATING & HARDWARE:")
+    py2 = purch_y + 35
+    c.setFont("Helvetica", 5.2)
+    c.setFillColor(colors.black)
+    for prow in [p for p in stock_data.get("purchase_list", []) if p.get("category") != "LINEAR_STOCK"][:5]:
+        sec = prow.get("section", "")
+        qty = prow.get("quantity", 1)
+        unit = prow.get("unit_size", "")
+        wt = prow.get("total_purchased_weight", 0.0)
+        wt_str = f" - {wt:.1f} lb" if wt > 0 else ""
+        c.drawString(ox + 205, py2, f"• {qty}x {sec[:28]} ({unit}){wt_str}")
+        py2 -= 7.5
 
 def generate_shop_drawings(params: ProjectParameters, assembly: Dict[str, Any], stock_data: Dict[str, Any], output_path: str):
     """Generates the complete 9-Sheet Vector Shop Drawing Set for US Letter Landscape."""
