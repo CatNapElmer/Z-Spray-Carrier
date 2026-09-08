@@ -53,6 +53,12 @@ def get_structural_checks(params: ProjectParameters):
     assembly = generate_fabrication_assembly(params)
     return assembly["structural"]
 
+@app.post("/api/geometry-checks")
+def get_geometry_checks(params: ProjectParameters):
+    """Physical contact, envelope, hinge-swing and machine-fit checks."""
+    assembly = generate_fabrication_assembly(params)
+    return assembly["geometry_check_report"].model_dump()
+
 @app.post("/api/optimizer")
 def get_stock_optimization(params: ProjectParameters):
     assembly = generate_fabrication_assembly(params)
@@ -65,7 +71,8 @@ def export_package(params: ProjectParameters):
     cut_list = assembly["cut_list"]
     stock_data = optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
     provenance = get_project_provenance(params)
-    
+    checks = assembly["geometry_check_report"]
+
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     output_dir = os.path.join(project_root, "output", "Z-Spray-Carrier-Fabrication-Package")
     os.makedirs(output_dir, exist_ok=True)
@@ -163,6 +170,42 @@ def export_package(params: ProjectParameters):
         f.write("up to truck flatbed headache rack / subframe tie-down anchors (FOS > 3.0), or add an underframe\n")
         f.write("king-post truss before highway transport under load.\n\n")
         f.write("--------------------------------------------------------------------------------\n")
+        f.write(f"DOES IT ACTUALLY FIT TOGETHER?  [{checks.overall_status}]\n")
+        f.write("--------------------------------------------------------------------------------\n")
+        f.write("These are measured from the real size of every piece of steel in the model,\n")
+        f.write("not from notes or drawings.\n\n")
+        for line in checks.summary:
+            f.write(f"  * {line}\n")
+        f.write("\n")
+
+        bad_contacts = [c for c in checks.contacts if not c.passed]
+        if bad_contacts:
+            f.write("JOINTS THAT CANNOT BE WELDED AS DRAWN:\n")
+            for c in bad_contacts:
+                f.write(f"  [X] {c.message}\n")
+            f.write("\n")
+
+        major = [i for i in checks.interferences
+                 if i.category == "UNINTENDED_CLASH" and i.severity == "MAJOR"]
+        if major:
+            f.write("PARTS THAT RUN INTO EACH OTHER:\n")
+            for i in major:
+                f.write(f"  [X] {i.message}\n")
+            f.write("\n")
+
+        if not checks.hinge.can_rotate:
+            f.write("RAMP SWING:\n")
+            for col in checks.hinge.collisions[:10]:
+                f.write(f"  [X] {col.message}\n")
+            f.write("\n")
+
+        if checks.machine.status != "PASS":
+            f.write("MACHINE FIT:\n")
+            for n in checks.machine.notes:
+                f.write(f"  [!] {n}\n")
+            f.write("\n")
+
+        f.write("--------------------------------------------------------------------------------\n")
         f.write("CRITICAL UNVERIFIED FIELD DIMENSIONS - MUST CONFIRM BEFORE CUTTING STEEL:\n")
         f.write("--------------------------------------------------------------------------------\n")
         for u in unverified_items:
@@ -177,11 +220,13 @@ def export_package(params: ProjectParameters):
         f.write("  Measure all longitudinal crossmembers directly from this front datum.\n")
         f.write("- HINGE CENTERLINE (X = 63.00\"): Centerline of the single rigid ramp pivot pin.\n")
         f.write("- RUNNING DECK ELEVATION (Z = 0.00\"): Target running surface is 17.0\" above ground.\n")
-        f.write("- BASE FRAME WIDTH: 36.00\" outside-to-outside of outer longitudinal tubes M1.\n")
-        f.write("- MAXIMUM OVERALL WIDTH: 38.00\" across flared guide tips (HARD CONSTRAINT <= 38.00\").\n")
-        f.write("- WHEEL TRACKS: 11.50\" flat width per side; 13.00\" clear center cleanout opening.\n")
-        f.write("- TWIN MOUNT STINGERS: Spaced 37.50\" center-to-center (UNVERIFIED: 40.0\" span - 2.5\" OD).\n")
-        f.write("- STINGER OVERLAP: 20.00\" underframe overlap passing under C1 (X=1\") and C2 (X=18\").\n")
+        f.write(f"- BASE FRAME WIDTH: {params.carrier_width:.2f}\" outside-to-outside of outer longitudinal tubes M1.\n")
+        f.write(f"- MAXIMUM ALLOWED WIDTH: {params.carrier_max_overall_width:.2f}\" (HARD CONSTRAINT).\n")
+        f.write(f"- MEASURED WIDTH OF THIS DESIGN: {checks.envelope.total_width:.2f}\" "
+                f"across {', '.join(sorted(set(checks.envelope.widest_left_pieces + checks.envelope.widest_right_pieces)))}.\n")
+        f.write(f"- WHEEL TRACKS: {params.track_flat_width:.2f}\" flat width per side; "
+                f"{params.track_center_gap:.2f}\" clear center cleanout opening.\n")
+        f.write(f"- TWIN MOUNT STINGERS: Spaced {params.receiver_spacing:.2f}\" center-to-center (UNVERIFIED - measure on the truck).\n")
         f.write("- HINGE CLEARANCE: 1-1/8\" OD x 0.172\" wall DOM tubing (0.781\" ID) provides intentional\n")
         f.write("  0.031\" (1/32\") clearance over 0.750\" pin to prevent binding under outdoor corrosion.\n")
         f.write("- WELD REQUIREMENTS: Structural tubes welded with 3/16\" fillet all around. Gussets 1/4\" fillet.\n")

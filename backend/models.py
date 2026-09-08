@@ -40,6 +40,7 @@ class ProjectParameters(BaseModel):
     ramp_hinge_sleeve_od: float = 1.125       # DESIGN: 1-1/8" DOM sleeve OD (in)
     ramp_hinge_sleeve_id: float = 0.781       # DESIGN: 25/32" DOM sleeve ID (0.031" diametral clearance over 3/4" pin) (in)
     ramp_hinge_sleeve_wall: float = 0.172     # DESIGN: 0.172" DOM wall thickness (in)
+    ramp_hinge_pin_z: float = -1.00           # DESIGN: Height of hinge pin axis relative to deck surface (in)
     
     # Truck Interface
     receiver_clear_opening: float = 2.00      # DESIGN: Clear inside opening of receiver socket (in)
@@ -59,6 +60,17 @@ class ProjectParameters(BaseModel):
     machine_length_oem: float = 70.50         # OEM: Machine nominal length (in)
     machine_length_field: float = 72.00       # MEASURED: Practical field length (in)
     machine_height: float = 48.00             # OEM: Height (in)
+    machine_rear_tire_size: str = "22x8.5-12" # OEM: Rear tire designation
+    machine_front_tire_size: str = "15x6-6"   # OEM: Front tire designation
+    machine_rear_tire_width: float = 8.50     # OEM: Rear tire section width (in)
+    machine_rear_tire_diameter: float = 22.00 # OEM: Rear tire overall diameter (in)
+    machine_front_tire_width: float = 6.00    # OEM: Front tire section width (in)
+    machine_front_tire_diameter: float = 15.00 # OEM: Front tire overall diameter (in)
+    # Wheel positions are NOT known. They are left as None on purpose so that no
+    # coordinate is ever invented to make a drawing or a clearance check work.
+    machine_wheelbase: Optional[float] = None            # UNVERIFIED: front axle to rear axle (in)
+    machine_rear_tire_to_rear: Optional[float] = None    # UNVERIFIED: rear tire rearmost point to back of machine (in)
+    machine_rear_track_width: Optional[float] = None     # UNVERIFIED: outside-to-outside across rear tires (in)
     machine_curb_weight: float = 698.0        # OEM: Dry curb weight (lb)
     fertilizer_hopper_weight: float = 150.0   # OEM: Main hopper capacity (lb)
     fertilizer_trays_weight: float = 100.0    # OEM: Two 50 lb trays (lb)
@@ -81,22 +93,55 @@ class Point3D(BaseModel):
     y: float
     z: float
 
+class BoxBounds(BaseModel):
+    """Real outside envelope of a fabricated part, in project coordinates."""
+    min_x: float = 0.0
+    max_x: float = 0.0
+    min_y: float = 0.0
+    max_y: float = 0.0
+    min_z: float = 0.0
+    max_z: float = 0.0
+
 class Hole(BaseModel):
+    """A hole is a real fabrication feature, not a note on a drawing."""
+    hole_id: str = ""
+    parent_mark: str = ""
     diameter: float
+    # True position in project coordinates.
     center_x: float
     center_y: float
     center_z: float = 0.0
+    axis: str = "Z"                  # Direction the drill travels: X, Y or Z
     reference_datum: str = "FRONT_DATUM"
+    # How the fabricator actually finds it with a tape measure.
+    reference_edge: str = ""         # e.g. "front (truck) end of the tube"
+    offset_from_reference: float = 0.0
+    plain_instruction: str = ""      # e.g. 'Drill 21/32". Center 3" from the end.'
     note: str = ""
+    field_fit: bool = False          # True = do not drill until test-fitted
     status: StatusEnum = StatusEnum.DESIGN
 
 class Weld(BaseModel):
-    connected_pieces: List[str]
-    weld_type: str = "FILLET" # FILLET, GROOVE, PLUG
+    """
+    A declared welded connection between exactly two pieces.
+
+    A weld record is a claim that two pieces meet. The geometry checker decides
+    whether that claim is true; it is never taken on trust.
+    """
+    weld_id: str = ""
+    piece_a: str = ""
+    piece_b: str = ""
+    connected_pieces: List[str] = []   # retained for backwards compatibility
+    weld_type: str = "FILLET"          # FILLET, GROOVE, PLUG, TACK
     size: str = "3/16"
     length: Optional[float] = None
     all_around: bool = False
+    both_sides: bool = False
+    plain_instruction: str = ""        # plain shop English for the fabricator
+    joint_note: str = ""
     shop_note: str = ""
+    requires_contact: bool = True
+    field_fit: bool = False            # do not final-weld until fitted to truck
     status: StatusEnum = StatusEnum.DESIGN
 
 class Member(BaseModel):
@@ -109,12 +154,16 @@ class Member(BaseModel):
     start_pt: Point3D
     end_pt: Point3D
     orientation: str = "X" # X (longitudinal), Y (transverse), Z (vertical)
+    # Real outside cross-section, used to build the physical envelope.
+    section_width: float = 2.0
+    section_depth: float = 2.0
     assembly: str = "MAIN_CARRIER" # MAIN_CARRIER, RAMP, STINGER, DETAILS
     cut_type: str = "SQUARE" # SQUARE, ANGLE_CUT, BEVEL, MITER
     cut_angle_left: float = 0.0
     cut_angle_right: float = 0.0
     unit_weight: float # lb/ft
     total_weight: float # lb
+    holes: List[Hole] = []
     notes: str = ""
     status: StatusEnum = StatusEnum.DESIGN
 
@@ -132,6 +181,16 @@ class Plate(BaseModel):
     unit_weight: float # lb/plate
     total_weight: float # lb
     assembly: str = "MAIN_CARRIER"
+    # Physical placement. origin is the minimum corner of the part.
+    origin: Optional[Point3D] = None
+    length_axis: str = "X"    # direction the `length` dimension runs
+    width_axis: str = "Y"     # direction the `width` dimension runs
+    normal_axis: str = "Z"    # direction the `thickness` runs
+    # Formed/brake-bent parts are not flat rectangles; they carry an explicit
+    # envelope covering the folded shape.
+    bbox_override: Optional[BoxBounds] = None
+    position_status: StatusEnum = StatusEnum.DESIGN
+    position_note: str = ""
     cut_notes: str = "Shear / Waterjet / Plasma cut"
     status: StatusEnum = StatusEnum.DESIGN
 
@@ -147,6 +206,102 @@ class HingeComponent(BaseModel):
     sleeve_material: str = "ASTM A513 DOM Mechanical Tube"
     retaining_method: str = "Cross-drilled 3/16\" Hole for Linch Pin with 3/4\" Heavy Flat Washers"
     status: StatusEnum = StatusEnum.DESIGN
+
+class ContactCheck(BaseModel):
+    """Result of testing whether a declared welded joint is real steel-to-steel."""
+    weld_id: str = ""
+    piece_a: str
+    piece_b: str
+    overlap_x: float = 0.0
+    overlap_y: float = 0.0
+    overlap_z: float = 0.0
+    gap: float = 0.0
+    penetration: float = 0.0
+    contact_area: float = 0.0
+    min_contact_dim: float = 0.0
+    # FACE_CONTACT | KNIFE_EDGE | GAP | INTERFERENCE | MISSING_GEOMETRY
+    result: str = "FACE_CONTACT"
+    passed: bool = False
+    message: str = ""
+
+class InterferenceCheck(BaseModel):
+    """Two parts occupying the same space."""
+    piece_a: str
+    piece_b: str
+    overlap_x: float = 0.0
+    overlap_y: float = 0.0
+    overlap_z: float = 0.0
+    penetration: float = 0.0
+    volume: float = 0.0
+    has_declared_weld: bool = False
+    category: str = "UNINTENDED_CLASH"  # FIT_REQUIRED | UNINTENDED_CLASH
+    severity: str = "MAJOR"             # MAJOR | MINOR (trim-to-fit)
+    message: str = ""
+
+class EnvelopeResult(BaseModel):
+    """Outside size of the finished carrier measured from the actual steel."""
+    min_x: float = 0.0
+    max_x: float = 0.0
+    min_y: float = 0.0
+    max_y: float = 0.0
+    min_z: float = 0.0
+    max_z: float = 0.0
+    total_width: float = 0.0
+    total_length: float = 0.0
+    width_limit: float = 38.0
+    within_limit: bool = False
+    width_over_limit: float = 0.0
+    widest_left_pieces: List[str] = []
+    widest_right_pieces: List[str] = []
+    message: str = ""
+
+class HingeCollision(BaseModel):
+    moving_piece: str
+    fixed_piece: str
+    angles_deg: List[float] = []
+    max_penetration: float = 0.0
+    message: str = ""
+
+class HingeRotationResult(BaseModel):
+    pivot_x: float = 0.0
+    pivot_z: float = 0.0
+    angles_checked: List[float] = []
+    rotating_pieces: List[str] = []
+    collisions: List[HingeCollision] = []
+    clear_angles: List[float] = []
+    can_rotate: bool = False
+    message: str = ""
+
+class MachineFitResult(BaseModel):
+    machine_width: float = 0.0
+    machine_length_field: float = 0.0
+    guide_clear_width: Optional[float] = None
+    width_shortfall: float = 0.0
+    width_fits: Optional[bool] = None
+    deck_usable_length: float = 0.0
+    front_overhang: float = 0.0
+    wheel_check_status: str = "UNVERIFIED"
+    status: str = "UNVERIFIED"  # PASS | FAIL | UNVERIFIED
+    notes: List[str] = []
+    field_measurements_required: List[str] = []
+
+class GeometryCheckReport(BaseModel):
+    contacts: List[ContactCheck] = []
+    interferences: List[InterferenceCheck] = []
+    envelope: EnvelopeResult = EnvelopeResult()
+    hinge: HingeRotationResult = HingeRotationResult()
+    machine: MachineFitResult = MachineFitResult()
+    unpositioned_parts: List[str] = []
+    member_count: int = 0
+    plate_count: int = 0
+    positioned_member_count: int = 0
+    positioned_plate_count: int = 0
+    weld_count: int = 0
+    failed_contact_count: int = 0
+    unintended_clash_count: int = 0
+    major_clash_count: int = 0
+    overall_status: str = "FAIL"
+    summary: List[str] = []
 
 class StructuralCheckResult(BaseModel):
     payload_weight: float

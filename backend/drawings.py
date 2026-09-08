@@ -326,11 +326,12 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.line(ox, oy - deck_w/2.0 - flare_w, ox + deck_l, oy - deck_w/2.0 - flare_w)
     c.line(ox, oy + deck_w/2.0 + flare_w, ox + deck_l, oy + deck_w/2.0 + flare_w)
     
-    # Machine Envelope Footprint (35.5" wide x 72.0" practical field length)
-    # Rear tires rest 1.0" nominal ahead of ramp hinge (X=62.0"). Machine projects forward to X = -10.0" over truck bed!
+    # Machine Envelope Footprint - drawn at the machine's PUBLISHED size.
+    # Nothing here is shrunk to make the picture work.
     mach_l = params.machine_length_field * scale
-    mach_w = (params.machine_width - 0.5) * scale
-    mach_front_x = ox + ((params.carrier_deck_length - params.ramp_clearance - params.machine_length_field) * scale) # X = -10.0"
+    mach_w = params.machine_width * scale
+    mach_front_x = ox + ((params.carrier_deck_length - params.ramp_clearance - params.machine_length_field) * scale)
+    overhang = params.machine_length_field - (params.carrier_deck_length - params.ramp_clearance)
     c.setStrokeColor(colors.HexColor("#0077B6"))
     c.setLineWidth(0.8)
     c.setDash([4, 2])
@@ -338,15 +339,18 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setDash([])
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#0077B6"))
-    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 8, "Z-SPRAY JUNIOR ENVELOPE (72\" L x 35.5\" W) - NO COLLISION WITH RAMP")
-    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 15, "FRONT OVERHANGS TRUCK BED 10\" (X = -10.0\" TO X = +62.0\")")
-    
-    # Rear Tires resting location (X = 51.0" to 62.0", exactly 1.0" ahead of ramp hinge at X=63.0")
-    rear_tire_x = ox + ((params.carrier_deck_length - params.ramp_clearance - 11.0) * scale)
-    for y_sign in [-1, 1]:
-        c.setFillColor(colors.HexColor("#343A40"))
-        c.rect(rear_tire_x, oy + y_sign * (12.25 * scale) - (4.25 * scale), 11.0 * scale, 8.5 * scale, fill=1, stroke=1)
-        
+    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 8,
+                 f"Z-SPRAY JUNIOR ENVELOPE ({fraction_str(params.machine_length_field)} L x {fraction_str(params.machine_width)} W)")
+    c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 15,
+                 f"FRONT OVERHANGS THE FRONT OF THE DECK BY {fraction_str(overhang)}")
+
+    # Wheel positions on the Z-Spray are not known. No tyre is drawn, because
+    # drawing one would require inventing a coordinate.
+    c.setFont("Helvetica-Bold", 6.0)
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.drawCentredString(ox + deck_l/2.0, oy - deck_w/2.0 - 26,
+                        "WHEEL POSITIONS NOT VERIFIED - MEASURE THE MACHINE (SEE FIELD CHECK LIST)")
+
     # Ramp Hinge Line at X = 63.0"
     hx = ox + deck_l
     dc.draw_centerline(hx, oy - deck_w/2 - 16, hx, oy + deck_w/2 + 16)
@@ -374,9 +378,6 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_v(oy - deck_w/2, oy + deck_w/2, ox - 38, f"FRAME WIDTH = {fraction_str(params.carrier_width)}")
     dc.draw_dim_v(oy - deck_w/2, oy - deck_w/2 + track_w, ox - 22, f"TRACK = {fraction_str(params.track_flat_width)}")
     dc.draw_dim_v(oy - stinger_span/2, oy + stinger_span/2, ox - 70, f"RECEIVER C-C = {fraction_str(params.receiver_spacing)} [UNVERIFIED]")
-    
-    # 1.0" Rear Ramp Clearance Callout
-    dc.draw_dim_h(rear_tire_x + 11.0 * scale, hx, oy - deck_w/2 - 14, "1.0\" NOM. CLEARANCE", ext_down=True)
     
     # 2. SIDE ELEVATION VIEW
     e_oy = 165.0
@@ -415,7 +416,7 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.setStrokeColor(colors.HexColor("#0077B6"))
     c.setLineWidth(0.8)
     c.setDash([3, 2])
-    c.rect(mach_front_x, e_oy, mach_l, 48.0 * scale * 0.45, fill=0, stroke=1)
+    c.rect(mach_front_x, e_oy, mach_l, params.machine_height * scale * 0.45, fill=0, stroke=1)
     c.setDash([])
     
     # Deployed Ramp Line

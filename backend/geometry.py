@@ -1,9 +1,11 @@
 import math
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from models import (
     ProjectParameters, StatusEnum, ParameterItem, Point3D, Hole, Weld,
-    Member, Plate, HingeComponent, StructuralCheckResult, BomRow, CutListRow
+    Member, Plate, HingeComponent, StructuralCheckResult, BomRow, CutListRow,
+    BoxBounds, GeometryCheckReport
 )
+import physical
 
 # Central Material & Shape Library
 # Stores exact dimensional, physical, and structural section properties
@@ -126,6 +128,447 @@ MATERIAL_LIBRARY = {
         "category": "GRATING"
     }
 }
+
+def section_outside_dims(section: str) -> Tuple[float, float]:
+    """
+    Real outside cross-section of a stock section, as (width, depth) in inches.
+
+    This is what the steel actually occupies in space - not a centreline.
+    """
+    mat = MATERIAL_LIBRARY.get(section)
+    if not mat:
+        return (2.0, 2.0)
+    kind = mat.get("type", "")
+    if kind in ("HSS", "ANGLE"):
+        return (float(mat.get("width", 2.0)), float(mat.get("height", 2.0)))
+    if kind == "ROUND":
+        d = float(mat.get("diameter", mat.get("thickness", 0.75)))
+        return (d, d)
+    if kind == "ROUND_TUBE":
+        d = float(mat.get("od", 1.125))
+        return (d, d)
+    t = float(mat.get("thickness", 0.25))
+    return (t, t)
+
+
+def apply_member_sections(members: List[Member]) -> None:
+    """Stamp every member with its true outside cross-section."""
+    for m in members:
+        w, d = section_outside_dims(m.section)
+        m.section_width = w
+        m.section_depth = d
+
+
+def build_plate_placements(params: ProjectParameters) -> Dict[str, Dict[str, Any]]:
+    """
+    Physical placement of every plate part.
+
+    Each plate is given a real position so that it takes part in the envelope,
+    contact and collision checks. Nothing here is a display convenience: these
+    are the positions the design implies, and where the design does not fix a
+    position, the placement is recorded as a design assumption so the checker
+    can report on it rather than the part silently vanishing from the model.
+    """
+    y_out = params.carrier_width / 2.0                 # outer face of the side rails
+    y_track_in = params.track_center_gap / 2.0         # inner track rail centreline
+    guide_t = 0.1875
+    guide_h = params.flared_guide_height
+    flare = params.flare_width
+    deck_l = params.carrier_deck_length
+    ramp_l = params.ramp_length
+    hinge_x = deck_l
+    pin_z = params.ramp_hinge_pin_z
+    y_stinger = params.receiver_spacing / 2.0
+    st_w, st_d = section_outside_dims(params.stinger_section)
+    frame_bottom = -2.0
+    stinger_bottom = -3.0 - st_d / 2.0
+
+    place: Dict[str, Dict[str, Any]] = {}
+
+    # --- Formed wheel guides. Folded shape, so an explicit envelope is used. ---
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        for mark, x0, x1 in (("FG1-" + side, 0.0, deck_l),
+                             ("RFG1-" + side, hinge_x, hinge_x + ramp_l)):
+            outer = sgn * (y_out + flare)
+            inner = sgn * (y_out - guide_t)
+            place[mark] = {
+                "bbox": BoxBounds(
+                    min_x=x0, max_x=x1,
+                    min_y=min(outer, inner), max_y=max(outer, inner),
+                    min_z=0.0, max_z=guide_h + flare,
+                ),
+                "note": ("Formed guide. Vertical leg stands on the outside face "
+                         "of the side rail; the flare folds outward at the top."),
+            }
+
+    # --- Traction grating, laid on top of the rails. ---
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        y_lo = min(sgn * y_out, sgn * y_track_in)
+        for mark, x0 in (("EM1-" + side, 0.0), ("REM1-" + side, hinge_x)):
+            place[mark] = {
+                "origin": Point3D(x=x0, y=y_lo, z=0.0),
+                "length_axis": "X", "width_axis": "Y", "normal_axis": "Z",
+                "note": "Lies flat on top of the side rail and the inner track rail.",
+            }
+
+    # --- Stinger gussets: vertical plates on the inboard face of each tube. ---
+    gusset_t = 0.250
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        inboard = sgn * (y_stinger - st_w / 2.0)
+        y_lo = min(inboard, inboard - sgn * gusset_t)
+        place[f"G1-{side}1"] = {
+            "origin": Point3D(x=1.0, y=y_lo, z=stinger_bottom),
+            "length_axis": "X", "width_axis": "Z", "normal_axis": "Y",
+            "note": ("Stands on edge against the inside face of the mounting "
+                     "tube, reaching up to the frame at the front cross tube."),
+        }
+        place[f"G1-{side}2"] = {
+            "origin": Point3D(x=params.stinger_overlap_length - 8.0, y=y_lo,
+                              z=stinger_bottom),
+            "length_axis": "X", "width_axis": "Z", "normal_axis": "Y",
+            "note": ("Stands on edge against the inside face of the mounting "
+                     "tube at the second cross tube."),
+        }
+
+    # --- Ramp ground transition plate, lapped over the ramp tip. ---
+    place["RF1"] = {
+        "origin": Point3D(x=hinge_x + ramp_l - 3.0, y=-y_out, z=0.0),
+        "length_axis": "Y", "width_axis": "X", "normal_axis": "Z",
+        "note": ("Lapped over the top of the last 3\" of the ramp and welded "
+                 "down; the bevelled edge runs off onto the ground."),
+    }
+
+    # --- Rear light guards, on the outside face of the rear frame corners. ---
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        y_face = sgn * y_out
+        y_lo = min(y_face, y_face + sgn * 0.1875)
+        place[f"G2-{side}"] = {
+            "origin": Point3D(x=deck_l - 8.0, y=y_lo, z=-6.0),
+            "length_axis": "X", "width_axis": "Z", "normal_axis": "Y",
+            "position_status": StatusEnum.DESIGN,
+            "note": ("Mounted on the outside face of the rear corner, hanging "
+                     "below the deck. Exact position is a design choice, not a "
+                     "measured dimension."),
+        }
+
+    # --- Hinge ears. The pin hole has to land on the pin axis, so the ear is
+    #     positioned from the pin, not from a plate corner. ---
+    ear_t = 0.375
+    ear_len = 4.50
+    ear_wid = 2.50
+    hole_from_end = 1.25
+    for i, (b_start, b_end, owner) in enumerate(hinge_barrel_positions(params), start=1):
+        # Ear sits just outboard of its barrel.
+        y_lo = b_end
+        if owner == "Carrier":
+            x0 = hinge_x + hole_from_end - ear_len
+        else:
+            x0 = hinge_x - hole_from_end
+        place[f"G3-{i}"] = {
+            "origin": Point3D(x=x0, y=y_lo, z=pin_z - ear_wid / 2.0),
+            "length_axis": "X", "width_axis": "Z", "normal_axis": "Y",
+            "note": (f"Hinge ear for barrel HS{i}, welded to the "
+                     f"{'carrier' if owner == 'Carrier' else 'ramp'}. "
+                     f"Pin hole must land on the pin centreline."),
+        }
+
+    # --- Front chain / restraint bracket, standing up on the front cross tube. ---
+    c1_x = 1.00
+    place["G4"] = {
+        "origin": Point3D(x=c1_x - 0.375 / 2.0, y=-2.0, z=0.0),
+        "length_axis": "Z", "width_axis": "Y", "normal_axis": "X",
+        "note": ("Stands on edge in the middle of the front cross tube and is "
+                 "welded all the way around its base."),
+    }
+    return place
+
+
+def hinge_barrel_positions(params: ProjectParameters
+                           ) -> List[Tuple[float, float, str]]:
+    """
+    Barrel positions along the hinge line as (y_start, y_end, owner).
+
+    These reproduce the barrel layout the current design specifies. They are
+    reported exactly as they are so that the checks can show what this layout
+    really does; nothing is quietly re-centred here.
+    """
+    out: List[Tuple[float, float, str]] = []
+    for i in range(1, 5):
+        y0 = -15.0 + (i * 6.0)
+        out.append((y0, y0 + 3.50, "Carrier" if i in (1, 4) else "Ramp"))
+    return out
+
+
+def apply_plate_placements(plates: List[Plate],
+                           params: ProjectParameters) -> None:
+    """Give every plate a real physical position."""
+    place = build_plate_placements(params)
+    for p in plates:
+        spec = place.get(p.piece_mark)
+        if not spec:
+            continue
+        if "bbox" in spec:
+            p.bbox_override = spec["bbox"]
+        if "origin" in spec:
+            p.origin = spec["origin"]
+            p.length_axis = spec.get("length_axis", "X")
+            p.width_axis = spec.get("width_axis", "Y")
+            p.normal_axis = spec.get("normal_axis", "Z")
+        p.position_status = spec.get("position_status", StatusEnum.DESIGN)
+        p.position_note = spec.get("note", "")
+
+
+def apply_holes(members: List[Member], plates: List[Plate],
+                params: ProjectParameters) -> List[Hole]:
+    """
+    Attach every hole to the part it is drilled in, with a real position and a
+    plain-English instruction the fabricator can follow with a tape measure.
+
+    Holes whose position depends on the truck are marked field_fit so they are
+    never drilled from a drawing dimension.
+    """
+    by_mark = {m.piece_mark: m for m in members}
+    by_plate = {p.piece_mark: p for p in plates}
+    all_holes: List[Hole] = []
+
+    def add_member_hole(mark: str, hole: Hole) -> None:
+        m = by_mark.get(mark)
+        if m is None:
+            return
+        hole.parent_mark = mark
+        m.holes.append(hole)
+        all_holes.append(hole)
+
+    # --- Hitch pin holes through the two truck mounting tubes. ---
+    y_stinger = params.receiver_spacing / 2.0
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        add_member_hole(f"S1-{side}", Hole(
+            hole_id=f"H-S1{side}-PIN",
+            diameter=params.hitch_pin_hole_dia,
+            center_x=-params.stinger_insertion_length + params.hitch_pin_hole_setback,
+            center_y=sgn * y_stinger,
+            center_z=-3.0,
+            axis="Y",
+            reference_edge="front (truck) end of the mounting tube",
+            offset_from_reference=params.hitch_pin_hole_setback,
+            plain_instruction=(
+                f"Drill {fraction_text(params.hitch_pin_hole_dia)} straight "
+                f"through both walls. Centre is "
+                f"{fraction_text(params.hitch_pin_hole_setback)} back from the "
+                f"front end of the tube - BUT do not drill until the tube has "
+                f"been slid into the truck socket and the hole marked off the "
+                f"truck."),
+            note="Setback is provisional. Transfer-punch from the truck socket.",
+            field_fit=True,
+            status=StatusEnum.ESTIMATED_UNVERIFIED,
+        ))
+
+    # --- Linchpin holes in the hinge pin. ---
+    pin = by_mark.get("P1")
+    if pin is not None:
+        half = pin.length / 2.0
+        for end, sgn in (("left", -1.0), ("right", 1.0)):
+            add_member_hole("P1", Hole(
+                hole_id=f"H-P1-{end.upper()}",
+                diameter=0.1875,
+                center_x=params.carrier_deck_length,
+                center_y=sgn * (half - 0.50),
+                center_z=params.ramp_hinge_pin_z,
+                axis="Z",
+                reference_edge=f"{end} end of the pin",
+                offset_from_reference=0.50,
+                plain_instruction=(
+                    "Drill 3/16\" through the pin, 1/2\" in from the end, for "
+                    "the linch pin."),
+                note=("Retention only works if the pin cannot slide out of the "
+                      "end barrels - check the barrel layout before drilling."),
+                status=StatusEnum.DESIGN,
+            ))
+
+    # --- Hinge ear holes: these must land exactly on the pin centreline. ---
+    for i, (b_start, b_end, owner) in enumerate(hinge_barrel_positions(params), start=1):
+        p = by_plate.get(f"G3-{i}")
+        if p is None:
+            continue
+        h = Hole(
+            hole_id=f"H-G3{i}",
+            parent_mark=p.piece_mark,
+            diameter=params.ramp_hinge_sleeve_id,
+            center_x=params.carrier_deck_length,
+            center_y=(b_end + 0.375 / 2.0),
+            center_z=params.ramp_hinge_pin_z,
+            axis="X",
+            reference_edge="hinge end of the ear",
+            offset_from_reference=1.25,
+            plain_instruction=(
+                f"Drill {fraction_text(params.ramp_hinge_sleeve_id)} for the "
+                f"3/4\" pin. Centre is 1 1/4\" in from the hinge end of the ear, "
+                f"centred across its width."),
+            note="Hole centre must line up with the barrel bore.",
+            status=StatusEnum.DESIGN,
+        )
+        p.holes = [h]
+        all_holes.append(h)
+
+    # --- Chain / restraint bracket. ---
+    g4 = by_plate.get("G4")
+    if g4 is not None:
+        h = Hole(
+            hole_id="H-G4", parent_mark="G4", diameter=1.00,
+            center_x=1.00, center_y=0.0, center_z=3.00, axis="X",
+            reference_edge="bottom edge of the bracket",
+            offset_from_reference=3.00,
+            plain_instruction=("Drill 1\" for the chain shackle. Centre is 3\" "
+                               "up from the bottom edge, centred side to side."),
+            status=StatusEnum.DESIGN,
+        )
+        g4.holes = [h]
+        all_holes.append(h)
+
+    # --- Rear light cut-outs. ---
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        p = by_plate.get(f"G2-{side}")
+        if p is None:
+            continue
+        h = Hole(
+            hole_id=f"H-G2{side}", parent_mark=p.piece_mark, diameter=2.50,
+            center_x=params.carrier_deck_length - 4.0,
+            center_y=sgn * (params.carrier_width / 2.0 + 0.09375),
+            center_z=-3.0, axis="Y",
+            reference_edge="rear edge of the guard plate",
+            offset_from_reference=4.00,
+            plain_instruction=("Cut the 6 3/4\" x 2 1/2\" oval for the light "
+                               "grommet. Centre it 4\" from the rear edge and "
+                               "halfway up the plate."),
+            note="Oval cut-out, not a round hole - 6 3/4\" long x 2 1/2\" high.",
+            status=StatusEnum.DESIGN,
+        )
+        p.holes = [h]
+        all_holes.append(h)
+
+    return all_holes
+
+
+def _weld(seq: List[Weld], a: str, b: str, size: str = "3/16",
+          all_around: bool = False, both_sides: bool = False,
+          weld_type: str = "FILLET", instruction: str = "",
+          field_fit: bool = False, note: str = "") -> None:
+    seq.append(Weld(
+        weld_id=f"W{len(seq) + 1:02d}",
+        piece_a=a, piece_b=b, connected_pieces=[a, b],
+        weld_type=weld_type, size=size,
+        all_around=all_around, both_sides=both_sides,
+        plain_instruction=instruction, joint_note=note,
+        shop_note=f"{size} fillet, {a} to {b}",
+        field_fit=field_fit,
+        status=StatusEnum.ESTIMATED_UNVERIFIED if field_fit else StatusEnum.DESIGN,
+    ))
+
+
+def build_welds(params: ProjectParameters) -> List[Weld]:
+    """
+    Every welded joint the design intends, as an explicit two-part connection.
+
+    Declaring a weld here is only a claim that these two pieces are meant to
+    join. The geometry checker decides whether they actually touch.
+    """
+    w: List[Weld] = []
+    cross = ["C1", "C2", "C3", "C4"]
+    ramp_cross = ["RC1", "RC2", "RC3", "RC4", "RC5"]
+
+    # Main frame
+    for cm in cross:
+        for rail in ("M1-L", "M1-R"):
+            _weld(w, cm, rail, all_around=True,
+                  instruction="Weld all the way around this joint.")
+        for rail in ("M2-L", "M2-R"):
+            _weld(w, cm, rail, both_sides=True,
+                  instruction="Weld both sides where the inner track rail "
+                              "crosses this cross tube.")
+    for side in ("L", "R"):
+        _weld(w, f"FG1-{side}", f"M1-{side}",
+              instruction="Weld the bottom edge of the guide to the outside of "
+                          "the side rail - 2\" of weld every 6\".")
+        _weld(w, f"EM1-{side}", f"M1-{side}", weld_type="TACK",
+              instruction="Tack the expanded metal down every 6\".")
+        _weld(w, f"EM1-{side}", f"M2-{side}", weld_type="TACK",
+              instruction="Tack the expanded metal down every 6\".")
+        _weld(w, f"G5-{side}", f"M1-{side}", both_sides=True,
+              instruction="Weld both sides of the wheel stop.")
+        _weld(w, f"G5-{side}", f"M2-{side}", both_sides=True,
+              instruction="Weld both sides of the wheel stop.")
+        _weld(w, f"G2-{side}", f"M1-{side}", all_around=True,
+              instruction="Weld the light guard all the way around.")
+    _weld(w, "G4", "C1", all_around=True,
+          instruction="Weld the chain bracket all the way around its base.")
+
+    # Truck mounting tubes - nothing here gets final-welded before test fit
+    for side in ("L", "R"):
+        _weld(w, f"S1-{side}", f"M1-{side}", size="1/4", both_sides=True,
+              field_fit=True,
+              instruction="DO NOT FINAL-WELD until both mounting tubes have "
+                          "been slid into the truck sockets and clamped.",
+              note="Truck fit-up joint.")
+        for cm in ("C1", "C2"):
+            _weld(w, f"S1-{side}", cm, size="1/4", all_around=True,
+                  field_fit=True,
+                  instruction="DO NOT FINAL-WELD until the mounting tubes are "
+                              "fitted to the truck.",
+                  note="Truck fit-up joint.")
+        for idx, cm in ((1, "C1"), (2, "C2")):
+            _weld(w, f"G1-{side}{idx}", f"S1-{side}", size="1/4",
+                  both_sides=True, field_fit=True,
+                  instruction="Weld both sides of the gusset to the mounting "
+                              "tube - after truck fit-up.")
+            _weld(w, f"G1-{side}{idx}", cm, size="1/4", both_sides=True,
+                  field_fit=True,
+                  instruction="Weld both sides of the gusset to the cross "
+                              "tube - after truck fit-up.")
+
+    # Hinge
+    for i, (_s, _e, owner) in enumerate(hinge_barrel_positions(params), start=1):
+        _weld(w, f"HS{i}", f"G3-{i}", size="1/4", all_around=True,
+              instruction="Weld the barrel all the way around where it meets "
+                          "the ear.")
+        host = "C4" if owner == "Carrier" else "RC1"
+        _weld(w, f"G3-{i}", host, size="1/4", both_sides=True,
+              instruction="Weld both sides of the hinge ear.")
+
+    # Ramp
+    for rc in ramp_cross:
+        for rail in ("R1-L", "R1-R"):
+            _weld(w, rc, rail, all_around=True,
+                  instruction="Weld all the way around this joint.")
+        for rail in ("R2-L", "R2-R"):
+            _weld(w, rc, rail, both_sides=True,
+                  instruction="Weld both sides where the inner rail crosses.")
+    for side in ("L", "R"):
+        _weld(w, f"RFG1-{side}", f"R1-{side}",
+              instruction="Weld the bottom edge of the ramp guide to the "
+                          "outside of the ramp rail - 2\" every 6\".")
+        _weld(w, f"REM1-{side}", f"R1-{side}", weld_type="TACK",
+              instruction="Tack the expanded metal down every 6\".")
+        _weld(w, f"REM1-{side}", f"R2-{side}", weld_type="TACK",
+              instruction="Tack the expanded metal down every 6\".")
+        _weld(w, "RF1", f"R1-{side}",
+              instruction="Weld the foot plate down along the ramp rail.")
+    _weld(w, "RF1", "RC5",
+          instruction="Weld the foot plate down onto the last cross piece.")
+    return w
+
+
+def fraction_text(val: float, precision: int = 32) -> str:
+    """Shop fraction for plain-English instructions, e.g. 0.656 -> 21/32\"."""
+    if abs(val) < 1e-9:
+        return '0"'
+    units = int(round(abs(val) * precision))
+    whole, rem = divmod(units, precision)
+    if rem == 0:
+        return f'{whole}"'
+    g = math.gcd(rem, precision)
+    frac = f"{rem // g}/{precision // g}"
+    return f'{whole} {frac}"' if whole else f'{frac}"'
+
 
 def get_project_provenance(params: ProjectParameters) -> Dict[str, ParameterItem]:
     """Returns complete provenance metadata for all project design values."""
@@ -634,18 +1077,10 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             cut_type="SQUARE",
             unit_weight=c_mat["wt_per_ft"],
             total_weight=round(c_wt, 2),
-            notes=f"Located at X = {x_loc:.2f}\" from front datum.",
+            notes=f"Cross tube. Centre sits {x_loc:.2f}\" back from the truck-side end of the side rails.",
             status=StatusEnum.DESIGN
         ))
-        welds.append(Weld(
-            connected_pieces=[mark, "M1-L", "M1-R"],
-            weld_type="FILLET",
-            size="3/16",
-            all_around=True,
-            shop_note=f"3/16\" Fillet weld all around joint at X={x_loc:.2f}\"",
-            status=StatusEnum.DESIGN
-        ))
-        
+
     # Flared Outer Wheel Guides on Carrier Deck (FG1-L, FG1-R)
     # Formed 3/16 plate along outer edges: 3.0" vertical + 1.0" outward flare at 45 deg
     fg_mat = MATERIAL_LIBRARY["3/16 Plate"]
@@ -743,7 +1178,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         cut_type="SQUARE",
         unit_weight=stinger_mat["wt_per_ft"],
         total_weight=round(stinger_wt, 2),
-        notes="20.0\" overlap ties under C1 (X=1\") and C2 (X=18\"). Receiver spacing 37.5\" c-c UNVERIFIED.",
+        notes="Truck mounting tube. Front (truck) end inserts into the receiver socket. Receiver spacing UNVERIFIED - must be measured on the truck. Connection to the carrier frame is reported by the geometry checker.",
         status=StatusEnum.ESTIMATED_UNVERIFIED
     ))
     members.append(Member(
@@ -760,7 +1195,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         cut_type="SQUARE",
         unit_weight=stinger_mat["wt_per_ft"],
         total_weight=round(stinger_wt, 2),
-        notes="20.0\" overlap ties under C1 (X=1\") and C2 (X=18\"). Receiver spacing 37.5\" c-c UNVERIFIED.",
+        notes="Truck mounting tube. Front (truck) end inserts into the receiver socket. Receiver spacing UNVERIFIED - must be measured on the truck. Connection to the carrier frame is reported by the geometry checker.",
         status=StatusEnum.ESTIMATED_UNVERIFIED
     ))
     
@@ -783,7 +1218,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             unit_weight=round(g1_wt, 2),
             total_weight=round(g1_wt, 2),
             assembly="STINGER",
-            cut_notes="Triangular gusset 4\" x 8\". Welded between C1 header beam and stinger at X=1.0\".",
+            cut_notes="Triangular gusset 4\" x 8\". Intended to tie the mounting tube to the front crossmember - see the connection report for whether it reaches.",
             status=StatusEnum.DESIGN
         ))
         plates.append(Plate(
@@ -799,7 +1234,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             unit_weight=round(g1_wt, 2),
             total_weight=round(g1_wt, 2),
             assembly="STINGER",
-            cut_notes="Triangular gusset 4\" x 8\". Welded between C2 crossmember and stinger at X=18.0\".",
+            cut_notes="Triangular gusset 4\" x 8\". Intended to tie the mounting tube to the second crossmember - see the connection report for whether it reaches.",
             status=StatusEnum.DESIGN
         ))
 
@@ -1018,8 +1453,8 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         grade=pin_mat["grade"],
         length=pin_len,
         quantity=1,
-        start_pt=Point3D(x=params.carrier_deck_length, y=-pin_len/2.0, z=-1.0),
-        end_pt=Point3D(x=params.carrier_deck_length, y=pin_len/2.0, z=-1.0),
+        start_pt=Point3D(x=params.carrier_deck_length, y=-pin_len/2.0, z=params.ramp_hinge_pin_z),
+        end_pt=Point3D(x=params.carrier_deck_length, y=pin_len/2.0, z=params.ramp_hinge_pin_z),
         orientation="Y",
         assembly="HINGE",
         cut_type="SQUARE",
@@ -1032,8 +1467,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
     # Hinge Sleeves: 1-1/8" OD x 0.172" wall DOM mechanical tubing (0.781" ID)
     sleeve_mat = MATERIAL_LIBRARY["1.125x0.172 DOM Tube"]
     sleeve_wt = (3.50 / 12.0) * sleeve_mat["wt_per_ft"]
-    for i in range(1, 5):
-        owner = "Carrier" if i in [1, 4] else "Ramp"
+    for i, (b_start, b_end, owner) in enumerate(hinge_barrel_positions(params), start=1):
         members.append(Member(
             piece_mark=f"HS{i}",
             description=f"Hinge Sleeve Barrel - {owner} ({i}/4)",
@@ -1041,8 +1475,8 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
             grade=sleeve_mat["grade"],
             length=3.50,
             quantity=1,
-            start_pt=Point3D(x=params.carrier_deck_length, y=-15.0 + (i * 6.0), z=-1.0),
-            end_pt=Point3D(x=params.carrier_deck_length, y=-11.5 + (i * 6.0), z=-1.0),
+            start_pt=Point3D(x=params.carrier_deck_length, y=b_start, z=params.ramp_hinge_pin_z),
+            end_pt=Point3D(x=params.carrier_deck_length, y=b_end, z=params.ramp_hinge_pin_z),
             orientation="Y",
             assembly="HINGE",
             cut_type="SQUARE",
@@ -1202,7 +1636,41 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
     ))
 
     # -------------------------------------------------------------
-    # 6. ASSEMBLE COMPLETE BOM AND CUT LIST
+    # 6. MAKE THE MODEL PHYSICAL
+    # -------------------------------------------------------------
+    # Give every member its real outside section, every plate a real position,
+    # every hole a real location, and declare every intended welded joint.
+    apply_member_sections(members)
+    apply_plate_placements(plates, params)
+    holes = apply_holes(members, plates, params)
+    welds = build_welds(params)
+
+    # Now find out whether any of it actually fits together.
+    checks = physical.run_geometry_checks(params, members, plates, welds)
+
+    # Connection notes are generated from what the checker found, never asserted.
+    contact_by_part: Dict[str, List[str]] = {}
+    for c in checks.contacts:
+        for mark in (c.piece_a, c.piece_b):
+            other = c.piece_b if mark == c.piece_a else c.piece_a
+            if c.result == "GAP":
+                contact_by_part.setdefault(mark, []).append(
+                    f"does NOT reach {other} (gap {c.gap:.2f}\")")
+            elif c.result == "KNIFE_EDGE":
+                contact_by_part.setdefault(mark, []).append(
+                    f"barely touches {other} ({c.min_contact_dim:.2f}\")")
+    for m in members:
+        problems = contact_by_part.get(m.piece_mark)
+        if problems:
+            m.notes = (m.notes + "  CHECK: " + "; ".join(sorted(set(problems))) + ".").strip()
+    for p in plates:
+        problems = contact_by_part.get(p.piece_mark)
+        if problems:
+            p.cut_notes = (p.cut_notes + "  CHECK: "
+                           + "; ".join(sorted(set(problems))) + ".").strip()
+
+    # -------------------------------------------------------------
+    # 7. ASSEMBLE COMPLETE BOM AND CUT LIST
     # -------------------------------------------------------------
     bom_rows: List[BomRow] = []
     cut_list_rows: List[CutListRow] = []
@@ -1280,9 +1748,11 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         "members": members,
         "plates": plates,
         "welds": welds,
+        "holes": holes,
         "bom": [b.model_dump() for b in bom_rows],
         "cut_list": [c.model_dump() for c in cut_list_rows],
         "total_carrier_weight": round(total_carrier_weight, 1),
         "structural": structural_results.model_dump(),
-        "ramp_angle_deg": ramp_angle_deg
+        "ramp_angle_deg": ramp_angle_deg,
+        "geometry_check_report": checks
     }
