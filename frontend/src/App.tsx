@@ -12,7 +12,7 @@ interface ParameterProvenance {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>('CARRIER')
+  const [activeTab, setActiveTab] = useState<string>('PROJECT')
   const [params, setParams] = useState({
     carrier_max_overall_width: 38.0,
     carrier_width: 36.0,
@@ -168,7 +168,8 @@ function App() {
   const renderBadge = (status?: string) => {
     if (!status) return null
     const colorClass = `badge-${status.toLowerCase()}`
-    return <span className={`status-badge ${colorClass}`}>{status}</span>
+    const labels: Record<string, string> = { FIELD_FIT: 'Field fit', ESTIMATED_UNVERIFIED: 'Check at fit-up', OEM: 'Machine spec', DESIGN: 'Build size', MEASURED: 'Measured', CALCULATED: 'Calculated' }
+    return <span className={`status-badge ${colorClass}`}>{labels[status] || status}</span>
   }
 
   const filteredBom = (assembly?.bom || []).filter((item: any) => {
@@ -186,83 +187,57 @@ function App() {
         <div className="brand-zone">
           <div className="logo-icon">Z</div>
           <div>
-            <h1>Z SPRAY CARRIER FABRICATOR</h1>
-            <p className="subtitle">Parametric Steel Fabrication & Shop-Drawing Generator (2026 Z-Spray Jr / 2015 F-350)</p>
+            <h1>Z-Spray Carrier</h1>
+            <p className="subtitle">Shop plans · Z-Spray Junior · 2015 F-350</p>
           </div>
         </div>
 
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={handleSaveJson}>Save JSON</button>
+          <details className="project-file"><summary>Project file</summary><div className="project-file-controls">
+          <button className="btn btn-secondary" onClick={handleSaveJson}>Save project</button>
           <label className="btn btn-secondary file-label">
-            Load JSON
+            Load project
             <input type="file" accept=".json" onChange={handleLoadJson} style={{ display: 'none' }} />
           </label>
-          <button className="btn btn-secondary" onClick={handleResetSeed}>Reset Seed</button>
+          <button className="btn btn-secondary" onClick={() => { if (window.confirm("Restore the starting project settings? Save your project first to keep your current settings.")) void handleResetSeed() }}>Restore starting settings</button>
+          </div></details>
           <button className="btn btn-primary export-btn" onClick={handleExport} disabled={isExporting}>
-            {isExporting ? 'Generating Package...' : 'Export Fabrication Package (ZIP)'}
+            <strong>{isExporting ? 'Preparing shop pack…' : 'EXPORT SHOP PACK'}</strong><small>Drawings + Cut List + Buy List + Build Notes</small>
           </button>
         </div>
       </header>
 
-      {/* Metric Callout Banner */}
       <div className="metrics-banner">
-        <div className="metric-chip">
-          <span className="label">MAX OVERALL WIDTH:</span>
-          <span className="val">{params.carrier_max_overall_width}" {renderBadge('DESIGN')}</span>
-        </div>
-        <div className="metric-chip">
-          <span className="label">FRAME WIDTH:</span>
-          <span className="val">{params.carrier_width}" {renderBadge('DESIGN')}</span>
-        </div>
-        <div className="metric-chip">
-          <span className="label">DECK LENGTH:</span>
-          <span className="val">{params.carrier_deck_length}" {renderBadge('MEASURED')}</span>
-        </div>
-        <div className="metric-chip">
-          <span className="label">TRUCK MOUNT:</span>
-          <span className="val">FIELD FIT TO TRUCK {renderBadge('FIELD_FIT')}</span>
-        </div>
-        <div className="metric-chip">
-          <span className="label">EST. STEEL DEADWEIGHT:</span>
-          <span className="val">{assembly?.total_carrier_weight || '--'} LB</span>
-        </div>
-        <div className="metric-chip">
-          <span className="label">STRUCTURAL STATUS:</span>
-          <span className="val">
-            {assembly?.structural?.status === 'PASS' ? (
-              <span className="status-badge badge-pass">PASS (holds to {assembly.structural.yields_at_g}g)</span>
-            ) : (
-              <span className="status-badge badge-fail">FAIL (yields at {assembly?.structural?.yields_at_g ?? '--'}g)</span>
-            )}
-          </span>
-        </div>
-        <div className="metric-chip alert-chip" onClick={() => setActiveTab('WARNINGS')}>
-          <span className="label">UNVERIFIED ITEMS:</span>
-          <span className="val alert-val">{unverifiedList.length} FIELD CHECKS REQ'D</span>
-        </div>
+        <div className="metric-chip"><span className="label">OVERALL WIDTH</span><span className="val">{params.carrier_max_overall_width}"</span></div>
+        <div className="metric-chip"><span className="label">DECK</span><span className="val">{params.carrier_deck_length}"</span></div>
+        <div className="metric-chip"><span className="label">RAMP</span><span className="val">{params.ramp_length}"</span></div>
+        <div className="metric-chip"><span className="label">TRUCK MOUNT</span><span className="val">FIELD FIT TO TRUCK</span></div>
+        <button className="metric-chip check-chip" onClick={() => setActiveTab('LOADS')}><span className="label">LOAD CHECK</span><span className={assembly?.structural?.status === 'PASS' ? 'badge-pass' : assembly?.structural?.status === 'FAIL' ? 'badge-fail' : ''}>{!assembly?.structural ? 'Loading…' : assembly.structural.status === 'PASS' ? 'PASS · View details' : 'PROBLEM · View details'}</span></button>
+        <button className="metric-chip check-chip" onClick={() => setActiveTab('WARNINGS')}><span className="label">FIT-UP CHECKS</span><span className="val">{unverifiedList.length} to review</span></button>
       </div>
 
       {/* Main Layout */}
       <div className="workspace-layout">
         {/* Navigation Tabs */}
-        <nav className="tab-navigation">
+        <nav className="tab-navigation" aria-label="Shop sections">
           {[
-            { id: 'PROJECT', label: '1. PROJECT' },
-            { id: 'CARRIER', label: '2. CARRIER DECK' },
-            { id: 'TRACKS', label: '3. TRACKS & GUIDES' },
-            { id: 'RAMP', label: '4. RAMP WELDMENT' },
-            { id: 'TRUCK', label: '5. TRUCK MOUNTS' },
-            { id: 'LOADS', label: '6. MACHINE & LOADS' },
-            { id: 'MATERIALS', label: '7. MATERIALS' },
-            { id: 'BOM', label: '8. PIECES & BOM' },
-            { id: 'CUTLIST', label: '9. CUT LIST' },
-            { id: 'STOCKPLAN', label: '10. STOCK PLAN' },
-            { id: 'DRAWINGS', label: '11. SHOP DRAWINGS' },
-            { id: 'WARNINGS', label: `12. WARNINGS (${unverifiedList.length})` }
+            { id: 'PROJECT', label: 'Overview' },
+            { id: 'BOM', label: 'Build · Parts & notes' },
+            { id: 'CUTLIST', label: 'Cut list' },
+            { id: 'STOCKPLAN', label: 'Buy list' },
+            { id: 'DRAWINGS', label: 'Shop drawings' },
+            { id: 'TRUCK', label: 'Truck fit' },
+            { id: 'WARNINGS', label: `Fit-up checks (${unverifiedList.length})` },
+            { id: 'CARRIER', label: 'Deck settings' },
+            { id: 'TRACKS', label: 'Tracks & guides' },
+            { id: 'RAMP', label: 'Ramp & hinge' },
+            { id: 'LOADS', label: 'Machine & load checks' },
+            { id: 'MATERIALS', label: 'Steel reference' }
           ].map(tab => (
             <button
               key={tab.id}
               className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${tab.id === 'WARNINGS' ? 'tab-warn' : ''}`}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -275,26 +250,26 @@ function App() {
           {/* TAB 1: PROJECT */}
           {activeTab === 'PROJECT' && (
             <div className="panel-box">
-              <h2>Project Overview & Seed Baseline</h2>
+              <h2>Build the Z-Spray carrier</h2>
+              <div className="shop-shortcuts">{[{id:'DRAWINGS',label:'Shop drawings'},{id:'CUTLIST',label:'Cut list'},{id:'STOCKPLAN',label:'Buy list'},{id:'BOM',label:'Build / fit-up notes'}].map(item => <button className="btn btn-secondary" key={item.id} onClick={() => setActiveTab(item.id)}>{item.label} →</button>)}</div>
               <p className="panel-desc">
-                Parametric steel fabrication generator configured for a <strong>2026 Z-Spray Junior (Model ZSX3624)</strong> mounted behind a <strong>2015 Ford F-350 Flatbed Truck</strong> using twin rear receiver tubes.
+                Build plans for a <strong>2026 Z-Spray Junior (Model ZSX3624)</strong> mounted behind a <strong>2015 Ford F-350 Flatbed Truck</strong> using twin rear receiver tubes.
               </p>
               <div className="info-grid">
                 <div className="info-card">
-                  <h4>Truck Interface</h4>
-                  <p>Twin receiver outside-to-outside span: <strong>40.00"</strong></p>
-                  <p>Receiver tube outside width: <strong>2.00"</strong></p>
-                  <p>Calculated center-to-center spacing: <strong>38.00"</strong> (Fixed datum)</p>
+                  <h4>Truck mount · Field fit</h4>
+                  <p>Use the truck as the fixture. Transfer pin holes from the truck.</p>
+                  <button className="btn btn-secondary" onClick={() => setActiveTab('TRUCK')}>Open truck fit notes →</button>
                 </div>
                 <div className="info-card">
-                  <h4>Carrier Baseline</h4>
-                  <p>Overall carrier width: <strong>38.00"</strong> (Field proven)</p>
-                  <p>Deck length: <strong>63.00"</strong> (Front stop to ramp hinge)</p>
-                  <p>Target running deck height: <strong>17.00"</strong> (No sag reproduction)</p>
+                  <h4>Carrier deck</h4>
+                  <p>Overall carrier width: <strong>{params.carrier_max_overall_width}"</strong></p>
+                  <p>Deck length: <strong>{params.carrier_deck_length}"</strong> (Front stop to ramp hinge)</p>
+                  <p>Target running deck height: <strong>{params.deck_height}"</strong></p>
                 </div>
                 <div className="info-card">
                   <h4>Rigid Ramp Assembly</h4>
-                  <p>Ramp length: <strong>61.00"</strong> hinge centerline to ground tip</p>
+                  <p>Ramp length: <strong>{params.ramp_length}"</strong> hinge centerline to ground tip</p>
                   <p>Hinge configuration: <strong>ONE single rigid hinged weldment</strong></p>
                   <p>Secondary containment: Upright 90-degree transport lock</p>
                 </div>
@@ -305,7 +280,7 @@ function App() {
           {/* TAB 2: CARRIER DECK */}
           {activeTab === 'CARRIER' && (
             <div className="panel-box">
-              <h2>Main Carrier Deck Geometry</h2>
+              <h2>Carrier deck settings</h2>
               <div className="form-grid">
                 <div className="input-field">
                   <label>Max Overall Width (in) {renderBadge('DESIGN')}</label>
@@ -350,7 +325,7 @@ function App() {
           {/* TAB 3: TRACKS & GUIDES */}
           {activeTab === 'TRACKS' && (
             <div className="panel-box">
-              <h2>Dual Wheel Tracks & Flared Guide Geometry</h2>
+              <h2>Tracks & guides</h2>
               <div className="form-grid">
                 <div className="input-field">
                   <label>Flat Track Width (in)</label>
@@ -404,7 +379,7 @@ function App() {
           {/* TAB 4: RAMP WELDMENT */}
           {activeTab === 'RAMP' && (
             <div className="panel-box">
-              <h2>Ramp Weldment & Hinge Parameters</h2>
+              <h2>Ramp & hinge</h2>
               <div className="form-grid">
                 <div className="input-field">
                   <label>Rigid Ramp Length (in) {renderBadge(provenance.ramp_length?.status)}</label>
@@ -510,7 +485,7 @@ function App() {
           {/* TAB 6: LOADS */}
           {activeTab === 'LOADS' && (
             <div className="panel-box">
-              <h2>Machine Payloads & Engineering Structural Checks</h2>
+              <h2>Machine & load checks</h2>
               <div className="form-grid">
                 <div className="input-field">
                   <label>Z-Spray Curb Weight (lb) {renderBadge('OEM')}</label>
@@ -567,8 +542,8 @@ function App() {
                     </div>
                   )}
 
-                  <h3>Multi-Case Structural Stress Analysis</h3>
-                  <table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
+                  <h3>Load check details</h3>
+                  <div className="table-scroll" tabIndex={0} role="region" aria-label="Scrollable shop table"><table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
                     <thead>
                       <tr>
                         <th>Load Case</th>
@@ -585,9 +560,9 @@ function App() {
                         <tr key={key} style={key === assembly.structural.controlling_load_case ? { backgroundColor: '#FFF5F5', fontWeight: 'bold' } : {}}>
                           <td><strong>{key} {key === assembly.structural.controlling_load_case && '(GOVERNING)'}</strong></td>
                           <td>{lc.description}</td>
-                          <td>{Math.round(lc.load_lb).toLocaleString()} lb</td>
-                          <td>{Math.round(lc.per_stinger_moment_in_lb).toLocaleString()} in-lb</td>
-                          <td>{Math.round(lc.stinger_stress_psi).toLocaleString()} psi</td>
+                          <td>{(Number.isFinite(lc.load_lb) ? Math.round(lc.load_lb).toLocaleString() : '—')} lb</td>
+                          <td>{(Number.isFinite(lc.per_stinger_moment_in_lb) ? Math.round(lc.per_stinger_moment_in_lb).toLocaleString() : '—')} in-lb</td>
+                          <td>{(Number.isFinite(lc.stinger_stress_psi) ? Math.round(lc.stinger_stress_psi).toLocaleString() : '—')} psi</td>
                           <td><strong>{lc.factor_of_safety}</strong> (target {lc.target_fos})</td>
                           <td>
                             <span className={`status-badge ${lc.status === 'PASS' ? 'badge-pass' : 'badge-fail'}`}>
@@ -597,12 +572,12 @@ function App() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
 
                   {assembly.structural.hinge_check && (
                     <>
                       <h3>Ramp Hinge Check</h3>
-                      <table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
+                      <div className="table-scroll" tabIndex={0} role="region" aria-label="Scrollable shop table"><table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
                         <thead>
                           <tr>
                             <th>What is checked</th>
@@ -647,7 +622,7 @@ function App() {
                             <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.weld_status}</span></td>
                           </tr>
                         </tbody>
-                      </table>
+                      </table></div>
                     </>
                   )}
 
@@ -676,8 +651,8 @@ function App() {
           {/* TAB 7: MATERIALS */}
           {activeTab === 'MATERIALS' && (
             <div className="panel-box">
-              <h2>Central Material & Shape Library</h2>
-              <table className="data-table">
+              <h2>Steel reference</h2>
+              <div className="table-scroll" tabIndex={0} role="region" aria-label="Scrollable shop table"><table className="data-table">
                 <thead>
                   <tr>
                     <th>Section Name</th>
@@ -770,7 +745,7 @@ function App() {
                     <td>EM1 & REM1 wheel track traction surface</td>
                   </tr>
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
 
@@ -778,11 +753,11 @@ function App() {
           {activeTab === 'BOM' && (
             <div className="panel-box">
               <div className="panel-header-row">
-                <h2>Bill of Materials & Fabrication Piece Schedule</h2>
+                <h2>Build · Parts & fit-up notes</h2>
                 <div className="filter-controls">
                   <input
                     type="text"
-                    placeholder="Search mark or desc..."
+                    aria-label="Search parts" placeholder="Find a piece or part…"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     className="search-input"
@@ -791,6 +766,7 @@ function App() {
                     value={assemblyFilter}
                     onChange={e => setAssemblyFilter(e.target.value)}
                     className="select-input"
+                    aria-label="Filter by assembly"
                   >
                     <option value="ALL">All Assemblies</option>
                     <option value="MAIN_CARRIER">Main Carrier</option>
@@ -802,92 +778,102 @@ function App() {
                 </div>
               </div>
 
-              <table className="data-table">
+              <p className="panel-desc">Piece marks match the drawings. Amber rows need cutting or fitting on the truck. Scroll sideways for all notes. The shop pack includes the full build sequence and tack-before-welding instructions.</p>
+              <details className="build-sequence">
+                <summary>Build order · Tack, fit, then weld</summary>
+                <ol>{(assembly?.fabrication_sequence || []).map((step: string, i: number) => <li key={i}>{step}</li>)}</ol>
+              </details>
+              <div className="table-scroll" tabIndex={0} role="region" aria-label="Scrollable shop table"><table className="data-table">
                 <thead>
                   <tr>
                     <th>Mark</th>
                     <th>Description</th>
-                    <th>Assy</th>
+                    <th>Assembly</th>
                     <th>Size / Section</th>
                     <th>Grade</th>
                     <th>Cut Length</th>
                     <th>Qty</th>
-                    <th>Unit Wt</th>
-                    <th>Total Wt</th>
+                    <th>Unit weight</th>
+                    <th>Total weight</th>
                     <th>Shop Notes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBom.map((item: any, idx: number) => (
-                    <tr key={idx}>
+                    <tr key={idx} className={item.field_fit || /CUT TO FIT|FIELD FIT/i.test(item.notes || '') ? 'field-fit-row' : undefined}>
                       <td><span className="mark-badge">{item.piece_mark}</span></td>
                       <td>{item.description}</td>
-                      <td>{item.assembly}</td>
+                      <td>{{ MAIN_CARRIER: 'Deck', RAMP: 'Ramp', STINGER: 'Truck mount', HINGE: 'Hinge', DETAILS: 'Details' }[item.assembly as string] || item.assembly}</td>
                       <td>{item.size}</td>
                       <td>{item.grade}</td>
                       <td>{item.cut_length ? `${item.cut_length}"` : '--'}</td>
-                      <td>{item.quantity}</td>
+                      <td className="quantity-cell">{item.quantity}</td>
                       <td>{item.unit_weight}</td>
                       <td><strong>{item.total_weight} lb</strong></td>
                       <td className="note-cell">{item.notes}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
 
           {/* TAB 9: CUT LIST */}
           {activeTab === 'CUTLIST' && (
             <div className="panel-box">
-              <h2>Shop-Oriented Cut List</h2>
+              <h2>Cut list</h2>
               <p className="panel-desc">All cuts grouped by raw stock with cut angles and end preparations.</p>
-              <table className="data-table">
+              <div className="table-scroll" tabIndex={0} role="region" aria-label="Scrollable shop table"><table className="data-table">
                 <thead>
                   <tr>
                     <th>Mark</th>
-                    <th>Raw Section</th>
+                    <th>Steel size</th>
                     <th>Cut Length</th>
                     <th>Qty</th>
                     <th>End Cut Left</th>
                     <th>End Cut Right</th>
-                    <th>Fabrication Cut Notes</th>
+                    <th>Cut / fit-up notes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(assembly?.cut_list || []).map((c: any, i: number) => (
-                    <tr key={i}>
+                    <tr key={i} className={c.field_fit || /CUT TO FIT|FIELD FIT/i.test(c.notes || '') ? 'field-fit-row' : undefined}>
                       <td><span className="mark-badge">{c.piece_mark}</span></td>
                       <td>{c.section}</td>
                       <td><strong>{c.cut_length}"</strong></td>
-                      <td>{c.quantity}</td>
+                      <td className="quantity-cell">{c.quantity}</td>
                       <td>{c.cut_angle_left === 0 ? 'Square (90°)' : `${c.cut_angle_left}° Miter`}</td>
                       <td>{c.cut_angle_right === 0 ? 'Square (90°)' : `${c.cut_angle_right}° Bevel`}</td>
                       <td>{c.notes}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
 
           {/* TAB 10: STOCK PLAN */}
           {activeTab === 'STOCKPLAN' && (
             <div className="panel-box">
-              <h2>1D Stock Cutting Plan & Material Optimization</h2>
+              <h2>Buy list · Steel & stock lengths</h2>
               <div className="nesting-summary">
                 <p>Total Raw Steel Weight: <strong>{stockPlan?.total_purchased_weight || 0} lb</strong></p>
                 <p>Total Cut Piece Weight: <strong>{stockPlan?.total_cut_weight || 0} lb</strong></p>
-                <p>Overall Material Nesting Yield: <strong>{stockPlan?.overall_efficiency_pct || 0}%</strong></p>
+                <p>Stock used: <strong>{stockPlan?.overall_efficiency_pct || 0}%</strong></p>
               </div>
 
-              <h3>Ordered Raw Stock Sticks</h3>
+              <div className="table-scroll" tabIndex={0} role="region" aria-label="Steel buy list">
+                <table className="data-table"><thead><tr><th>Steel / material</th><th>Grade</th><th>Buy length / size</th><th>Qty</th><th>Notes</th></tr></thead><tbody>
+                {(stockPlan?.purchase_list || []).map((item: any, i: number) => <tr key={i}><td><strong>{item.section}</strong></td><td>{item.grade}</td><td>{item.stick_length ? `${item.stick_length / 12} ft (${item.stick_length}")` : item.unit_size}</td><td className="quantity-cell">{item.quantity}</td><td>{item.notes}</td></tr>)}
+                </tbody></table>
+              </div>
+              <h3>Where each stock length gets cut</h3>
               <div className="sticks-container">
                 {(stockPlan?.stock_plan || []).map((stick: any, i: number) => (
                   <div key={i} className="stick-card">
                     <div className="stick-header">
                       <strong>{stick.stick_id}: {stick.section}</strong> ({stick.stock_length / 12} ft stick - {stick.stock_length}")
-                      <span className="stick-stat">Yield: {stick.efficiency_pct}% | Scrap: {stick.scrap_remaining}"</span>
+                      <span className="stick-stat">Used: {stick.efficiency_pct}% | Left over: {stick.scrap_remaining}"</span>
                     </div>
                     <div className="stick-bar-visual">
                       {stick.parts.map((p: any, pi: number) => (
@@ -901,6 +887,7 @@ function App() {
                         </div>
                       ))}
                     </div>
+                    <p className="stock-piece-list">{stick.parts.map((p: any) => `${p.piece_mark}: ${p.length}"`).join(' · ')}</p>
                   </div>
                 ))}
               </div>
@@ -910,9 +897,9 @@ function App() {
           {/* TAB 11: DRAWINGS */}
           {activeTab === 'DRAWINGS' && (
             <div className="panel-box">
-              <h2>Vector Shop Drawing Set (9 US Letter Sheets)</h2>
+              <h2>Shop drawings</h2>
               <p className="panel-desc">
-                Fully dimensioned multi-sheet vector PDF package generated specifically for US Letter 8.5 x 11 Landscape.
+                Print the dimensioned drawings on US Letter paper, landscape. Export the shop pack for drawings, cut and buy lists, and the build sequence in README-FOR-FABRICATOR.txt.
               </p>
               <div className="drawing-sheet-list">
                 {[
@@ -937,7 +924,7 @@ function App() {
               </div>
 
               <div className="drawings-action-row">
-                <button className="btn btn-primary" onClick={handleExport}>Download Full 9-Sheet PDF Package</button>
+                <button className="btn btn-primary" onClick={handleExport}>Export shop pack (ZIP)</button>
               </div>
             </div>
           )}
@@ -945,10 +932,11 @@ function App() {
           {/* TAB 12: WARNINGS */}
           {activeTab === 'WARNINGS' && (
             <div className="panel-box warn-panel">
-              <h2>Mandatory Field Verification Warnings</h2>
+              <h2>Fit-up checks</h2>
               <p className="panel-desc">
-                The following critical dimensions are currently provisional design estimates. A steel fitter must confirm these on the physical truck and equipment before cutting raw steel:
+                Review these items on the truck and machine before cutting. The notes below explain what needs checking.
               </p>
+              {unverifiedList.length === 0 && <div className="recom-box"><h3>No outstanding parameter checks</h3><p>Truck mounting is still field fit. Follow the truck-fit instructions and the notes for each part.</p><button className="btn btn-secondary" onClick={() => setActiveTab('TRUCK')}>Truck fit →</button></div>}
               <div className="unverified-cards">
                 {unverifiedList.map(item => (
                   <div key={item.name} className="warn-card">
@@ -969,13 +957,13 @@ function App() {
         {/* Real-time 2D Orthographic SVG Preview Sidebar */}
         <aside className="preview-sidebar">
           <div className="preview-header">
-            <h3>2D Fabrication Geometry Preview</h3>
-            <span className="preview-sub">True Parametric Lines</span>
+            <h3>Carrier preview</h3>
+            <span className="preview-sub">Quick reference · Use shop drawings to build</span>
           </div>
 
           {/* Plan View Preview */}
           <div className="svg-box">
-            <h4>Plan View (X-Y Plane)</h4>
+            <h4>Top view</h4><div className="preview-directions"><span>← TRUCK SIDE</span><span>RAMP SIDE →</span></div>
             <svg width="100%" height="220" viewBox="-30 -35 150 70">
               {/* Front Datum Line */}
               <line x1="0" y1="-30" x2="0" y2="30" stroke="#D90429" strokeWidth="0.8" strokeDasharray="2,2" />
@@ -1013,7 +1001,7 @@ function App() {
 
           {/* Elevation View Preview */}
           <div className="svg-box">
-            <h4>Elevation View (X-Z Profile)</h4>
+            <h4>Side view</h4><div className="preview-directions"><span>← TRUCK SIDE</span><span>RAMP SIDE →</span></div>
             <svg width="100%" height="180" viewBox="-30 -70 150 80">
               {/* Ground Line */}
               <line x1="-25" y1="0" x2="110" y2="0" stroke="#6C757D" strokeWidth="0.8" />

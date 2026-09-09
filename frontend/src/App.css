@@ -1,8 +1,9 @@
 /* Z SPRAY CARRIER FABRICATOR STYLING */
+/* Shop controls use a 46px minimum target; tables scroll within the panel. */
 :root {
-  --navy-dark: #0D1B2A;
-  --navy-mid: #1B263B;
-  --navy-light: #415A77;
+  --navy-dark: #20262B;
+  --navy-mid: #343E47;
+  --navy-light: #52616D;
   --accent-blue: #0077B6;
   --accent-highlight: #00B4D8;
   --warn-red: #D90429;
@@ -23,7 +24,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-main);
   color: #212529;
-  line-height: 1.4;
+  line-height: 1.5;
+  font-size: 16px;
 }
 
 .app-container {
@@ -64,14 +66,14 @@ body {
 }
 
 .brand-zone h1 {
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 0.5px;
 }
 
 .subtitle {
-  font-size: 12px;
-  color: #90E0EF;
+  font-size: 15px;
+  color: #DBE1E6;
 }
 
 .header-actions {
@@ -81,13 +83,13 @@ body {
 
 /* Buttons */
 .btn {
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: 12px 18px;
+  min-height: 46px;
+  font-size: 15px;
   font-weight: 700;
   border-radius: 4px;
   cursor: pointer;
   border: none;
-  transition: all 0.15s ease;
 }
 
 .btn-primary {
@@ -127,7 +129,7 @@ body {
   padding: 8px 24px;
   display: flex;
   gap: 16px;
-  overflow-x: auto;
+  flex-wrap: wrap;
   align-items: center;
 }
 
@@ -135,7 +137,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 14px;
   border-right: 1px solid var(--border-color);
   padding-right: 14px;
   white-space: nowrap;
@@ -164,7 +166,7 @@ body {
 
 /* Status Badges */
 .status-badge {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   padding: 2px 6px;
   border-radius: 3px;
@@ -278,15 +280,15 @@ body {
 
 .tab-btn {
   text-align: left;
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 12px 14px;
+  min-height: 48px;
+  font-size: 15px;
   font-weight: 700;
   background-color: #FFFFFF;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   cursor: pointer;
   color: #495057;
-  transition: all 0.15s ease;
 }
 
 .tab-btn:hover {
@@ -321,22 +323,22 @@ body {
 }
 
 .panel-box h2 {
-  font-size: 16px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--navy-dark);
-  margin-bottom: 6px;
+  margin-bottom: 14px;
 }
 
 .panel-desc {
-  font-size: 12px;
-  color: #6C757D;
-  margin-bottom: 18px;
+  font-size: 16px;
+  color: #52606A;
+  margin-bottom: 20px;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 24px;
 }
 
 .input-field {
@@ -346,22 +348,25 @@ body {
 }
 
 .input-field label {
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 700;
   color: #343A40;
 }
 
 .input-field input, .input-field select {
-  padding: 7px 10px;
-  font-size: 13px;
+  padding: 10px 12px;
+  min-height: 46px;
+  min-width: 0;
+  width: 100%;
+  font-size: 16px;
   font-weight: 600;
   border: 1px solid #CED4DA;
   border-radius: 4px;
 }
 
 .input-field .hint {
-  font-size: 10px;
-  color: #6C757D;
+  font-size: 14px;
+  color: #52606A;
 }
 
 .unverified-field {
@@ -381,7 +386,7 @@ body {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 15px;
   margin-top: 12px;
 }
 
@@ -389,12 +394,13 @@ body {
   background-color: var(--navy-mid);
   color: #FFFFFF;
   text-align: left;
-  padding: 8px 10px;
+  padding: 12px 14px;
   font-weight: 700;
 }
 
 .data-table td {
-  padding: 7px 10px;
+  padding: 12px 14px;
+  vertical-align: top;
   border-bottom: 1px solid #E9ECEF;
 }
 
@@ -411,7 +417,7 @@ body {
 }
 
 .note-cell {
-  font-size: 10px;
+  font-size: 15px;
   color: #555555;
 }
 
@@ -619,6 +625,65 @@ body {
   width: 100%;
   max-width: 100%;
 }
+
+.app-header { gap: 24px; flex-wrap: wrap; }
+.brand-zone { min-width: 0; }
+.brand-zone h1 { color: white; line-height: 1.2; }
+.header-actions { align-items: start; flex-wrap: wrap; }
+.export-btn { display: flex; flex-direction: column; align-items: start; gap: 4px; }
+.export-btn strong { font-size: 17px; }
+.export-btn small { font-size: 13px; font-weight: 500; }
+.project-file { max-width: 260px; }
+.project-file summary { min-height: 46px; padding: 12px; cursor: pointer; border: 1px solid #74818C; border-radius: 4px; }
+.project-file-controls { display: grid; gap: 8px; padding-top: 10px; }
+.project-file-controls .file-label { cursor: pointer; }
+.metrics-banner { gap: 12px 22px; padding-block: 16px; }
+.metric-chip { flex-wrap: wrap; white-space: normal; }
+.metric-chip .label { color: #52606A; font-size: 12px; }
+.metric-chip .val { font-size: 18px; }
+.check-chip { cursor: pointer; background: white; padding: 10px; min-height: 46px; border: 1px solid var(--border-color); border-radius: 4px; }
+.badge-field_fit, .badge-estimated_unverified { color: #684500; background: #FFF0C2; border-color: #D4AA47; }
+.tab-navigation { width: 100%; gap: 7px; }
+.tab-btn.active { border-left: 5px solid var(--warn-red); }
+.tab-warn { color: #684500; }
+.panel-box { overflow-x: visible; }
+.table-scroll { width: 100%; max-width: 100%; min-width: 0; overflow: auto; max-height: 70vh; margin-block: 18px; border: 1px solid var(--border-color); }
+.table-scroll .data-table { min-width: 950px; margin: 0; }
+.data-table th { position: sticky; top: 0; z-index: 1; }
+.data-table tbody tr:nth-child(even) { background: #F0F3F5; }
+.data-table tbody tr.field-fit-row { background: #FFF1CD; }
+.field-fit-row td:first-child { border-left: 5px solid #B67A00; }
+.mark-badge { display: inline-block; white-space: nowrap; font-size: 15px; padding: 5px 8px; }
+.quantity-cell { font-size: 18px; font-weight: 800; text-align: center; }
+.shop-shortcuts { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 20px; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 18px; }
+.info-card { padding: 18px; background: #F1F3F5; border: 1px solid var(--border-color); border-top: 4px solid var(--navy-mid); }
+.info-card h4 { font-size: 18px; margin-bottom: 12px; }
+.info-card p { margin-bottom: 10px; }
+.preview-header h3 { font-size: 20px; }
+.preview-sub { display: block; font-size: 14px; color: #52606A; }
+.svg-box { padding: 16px; }
+.svg-box h4 { font-size: 17px; }
+.preview-directions { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 800; color: #343E47; }
+.warn-text, .warn-action, .warn-cur, .warn-desc, .recom-box ul, .sheet-info p { font-size: 15px; color: #414D57; }
+.warn-title, .sheet-info h4, .recom-box h4 { font-size: 17px; }
+.warn-badge { font-size: 12px; }
+.warn-header, .stick-header { flex-wrap: wrap; gap: 10px; }
+.sheet-row { padding: 16px; }
+.sheet-num-badge { font-size: 17px; flex-shrink: 0; }
+.stick-header { font-size: 16px; }
+.stick-stat { font-size: 14px; }
+.stick-bar-visual { height: 34px; }
+.stick-part { overflow: hidden; font-size: 12px; }
+.stock-piece-list { margin-top: 12px; font-size: 15px; line-height: 1.7; }
+.nesting-summary { margin-block: 20px; }
+.search-input, .select-input { min-height: 46px; font-size: 15px; }
+.structural-fail-banner p { font-size: 16px; }
+.warn-header { align-items: start; }
+.build-sequence { padding: 16px; border: 2px solid #B67A00; background: #FFF5DE; }
+.build-sequence summary { cursor: pointer; min-height: 46px; font-size: 18px; font-weight: 800; }
+.build-sequence ol { padding-left: 28px; }
+.build-sequence li { padding: 10px 0 10px 8px; border-bottom: 1px solid #DCCCAF; }
 
 @media (max-width: 1250px) {
   .workspace-layout {
