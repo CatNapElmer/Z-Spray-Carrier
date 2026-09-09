@@ -117,9 +117,16 @@ not leave them off.**
 
 Windows 10/11, Python 3.12+, Node 18+.
 
-```powershell
-.\Start-ZSprayCarrier.ps1
-```
+Double-click **Z-Spray Carrier.vbs** (or make a desktop shortcut to it). Both
+servers start hidden, nothing is left on screen, and the browser opens at
+`http://localhost:5173` once the page is actually ready. Starting it a second
+time will not launch duplicates.
+
+**Stop-ZSprayCarrier.cmd** shuts down what the launcher started. Server output
+goes to `logs/`.
+
+If Windows Script Host is blocked on your machine, use **Z-Spray Carrier.cmd**
+instead - same thing, but a console flashes for a moment.
 
 Backend on `http://localhost:8000`, frontend on `http://localhost:5173`.
 
