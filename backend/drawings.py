@@ -95,8 +95,8 @@ class DraftingCanvas:
         c.drawString(tb_x + 8, tb_y + 17, "UNITS: INCHES (USCS)")
         c.drawString(tb_x + 8, tb_y + 8, f"SCALE: {scale}")
         
-        c.drawString(tb_x + 85, tb_y + 17, "REV: 0 (INITIAL BUILD)")
-        c.drawString(tb_x + 85, tb_y + 8, "CAD: Z-SPRAY FABRICATOR")
+        c.drawString(tb_x + 85, tb_y + 17, "REV: 0")
+        c.drawString(tb_x + 85, tb_y + 8, "Z-SPRAY CARRIER")
         
         c.setFont("Helvetica", 6)
         c.drawString(tb_x + 165, tb_y + 17, "SHEET NUMBER")
@@ -117,25 +117,56 @@ class DraftingCanvas:
         c.setFont("Helvetica-Bold", 6.5)
         c.drawString(
             margin + 12, h - margin - 12,
-            "CRITICAL: ALL DIMENSIONS GOVERN. VERIFY ALL UNVERIFIED FIELD MEASUREMENTS BEFORE CUTTING STEEL OR DRILLING."
+            "ALL DIMENSIONS IN INCHES AND GOVERN OVER THE DRAWING.  TACK FIRST - TEST FIT BEFORE FINAL WELD.  "
+            "ITEMS MARKED FIELD FIT ARE SET ON THE TRUCK, NOT OFF THIS SHEET."
         )
 
-    def draw_unverified_banner(self, x: float, y: float, w: float, h: float, text: str):
+    def draw_note_box(self, x: float, y: float, w: float, h: float, text: str,
+                      heading: str = "READ THIS FIRST"):
+        """
+        Plain note box. Grows its own height to fit the text so nothing is ever
+        clipped, and wraps long lines instead of running off the edge.
+        """
         c = self.c
+        size = 6.0
+        lead = 8.0
+        wrapped: List[str] = []
+        for raw in text.split(chr(10)):
+            line = raw.rstrip()
+            if not line:
+                wrapped.append("")
+                continue
+            while c.stringWidth(line, "Helvetica", size) > (w - 14):
+                cut = len(line)
+                while cut > 1 and c.stringWidth(line[:cut], "Helvetica", size) > (w - 14):
+                    cut -= 1
+                brk = line.rfind(" ", 0, cut)
+                brk = brk if brk > 10 else cut
+                wrapped.append(line[:brk])
+                line = "   " + line[brk:].lstrip()
+            wrapped.append(line)
+
+        need = 16 + len(wrapped) * lead + 6
+        h = max(h, need)
+
         c.setFillColor(colors.HexColor("#FFF3CD"))
         c.setStrokeColor(colors.HexColor("#FFC107"))
         c.setLineWidth(1.0)
         c.rect(x, y, w, h, fill=1, stroke=1)
         c.setFillColor(colors.HexColor("#856404"))
         c.setFont("Helvetica-Bold", 6.5)
-        c.drawString(x + 6, y + h - 10, "[!] UNVERIFIED FIELD DIMENSION - MANDATORY CONFIRMATION")
-        c.setFont("Helvetica", 6.0)
-        # Handle multi-line
-        lines = text.split("\n")
-        line_y = y + h - 20
-        for line in lines:
+        c.drawString(x + 6, y + h - 11, heading.upper())
+        c.setFont("Helvetica", size)
+        line_y = y + h - 21
+        for line in wrapped:
             c.drawString(x + 6, line_y, line)
-            line_y -= 8
+            line_y -= lead
+        return h
+
+    # Kept so existing callers keep working.
+    def draw_unverified_banner(self, x: float, y: float, w: float, h: float,
+                               text: str, heading: str = "READ THIS FIRST"):
+        return self.draw_note_box(x, y, w, h, text, heading)
 
     def draw_dim_h(self, x1: float, x2: float, y: float, text: str, leader_y: Optional[float] = None, ext_down: bool = True):
         c = self.c
@@ -344,19 +375,23 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.drawString(mach_front_x + 6, oy + mach_w/2.0 - 15,
                  f"FRONT OVERHANGS THE FRONT OF THE DECK BY {fraction_str(overhang)}")
 
-    # Wheel positions on the Z-Spray are not known. No tyre is drawn, because
-    # drawing one would require inventing a coordinate.
+    # Where the machine's wheels land is settled by rolling it on, so no tyre
+    # is drawn here - drawing one would mean inventing a coordinate.
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#D90429"))
     c.drawCentredString(ox + deck_l/2.0, oy - deck_w/2.0 - 26,
-                        "WHEEL POSITIONS NOT VERIFIED - MEASURE THE MACHINE (SEE FIELD CHECK LIST)")
+                        "CHECK MACHINE CLEARANCE DURING FIT-UP - ROLL THE Z-SPRAY ON AND LOOK")
 
     # Ramp Hinge Line at X = 63.0"
     hx = ox + deck_l
     dc.draw_centerline(hx, oy - deck_w/2 - 16, hx, oy + deck_w/2 + 16)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(hx + 3, oy + deck_w/2 + 8, "RAMP HINGE (X=63.0\")")
+    c.drawString(hx + 3, oy + deck_w/2 + 8, "RAMP HINGE")
+    c.setFont("Helvetica-Bold", 7.5)
+    c.setFillColor(colors.HexColor("#003566"))
+    c.drawCentredString(ox + deck_l/2.0, oy + deck_w/2.0 + 62, "TRUCK SIDE")
+    c.drawCentredString(hx + (61.0 * scale)/2.0, oy + deck_w/2.0 + 62, "RAMP SIDE")
     
     # Deployed ramp outline (61.0" length)
     ramp_l = params.ramp_length * scale
@@ -379,8 +414,8 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_v(oy - deck_w/2, oy - deck_w/2 + track_w, ox - 22, f"TRACK = {fraction_str(params.track_flat_width)}")
     c.setFont("Helvetica-Bold", 6.5)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawCentredString(ox - 70, oy, "MOUNTING TUBES:")
-    c.drawCentredString(ox - 70, oy - 9, "FIELD FIT TO TRUCK")
+    c.drawString(ox, oy + deck_w/2.0 + 50,
+                 "MOUNTING TUBES UNDER THE DECK: FIELD FIT TO TRUCK (SEE S4)")
     
     # 2. SIDE ELEVATION VIEW
     e_oy = 165.0
@@ -397,7 +432,7 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.line(ox - 45, ground_y, hx + dx + 15, ground_y)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawString(ox - 45, ground_y + 4, "GROUND LEVEL (Z=-17\")")
+    c.drawString(ox + 10, ground_y + 4, f"GROUND LEVEL (DECK IS {fraction_str(params.deck_height)} UP)")
     
     # Carrier Frame Tube
     c.setStrokeColor(colors.black)
@@ -435,7 +470,7 @@ def draw_sheet_s1(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.rect(ox - ins_l, e_oy - (4.0 * scale), ins_l + ovl_l, 2.0 * scale, fill=1, stroke=1)
     
     # Elevation Dimensions
-    dc.draw_dim_v(ground_y, e_oy, ox - 45, f"DECK HT = {fraction_str(params.deck_height)}")
+    dc.draw_dim_v(ground_y, e_oy, ox - 28, f"DECK HT = {fraction_str(params.deck_height)}")
     dc.draw_dim_v(e_oy, e_oy + (3.0 * scale), ox - 20, f"GUIDE = {fraction_str(params.flared_guide_height)}")
     dc.draw_dim_v(e_oy, e_oy + ramp_l, hx + 22, f"RAMP HT = {fraction_str(params.ramp_length)}")
     
@@ -536,13 +571,14 @@ def draw_sheet_s2(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     # Piece Mark Balloons
     dc.draw_balloon(ox + 70, oy + deck_w/2 + 8, "M1-R", leader_to=(ox + 70, oy + deck_w/2 - m_thk/2))
     dc.draw_balloon(ox + 70, oy - deck_w/2 - 14, "M1-L", leader_to=(ox + 70, oy - deck_w/2 + m_thk/2))
+    dc.draw_balloon(ox - 24, oy + 30, "C1", leader_to=(ox + (1.00 * scale), oy + 16))
     dc.draw_balloon(ox + (18.00 * scale) + 10, oy - 20, "C2", leader_to=(ox + (18.00 * scale), oy - 6))
     dc.draw_balloon(ox + (38.00 * scale) + 10, oy - 20, "C3", leader_to=(ox + (38.00 * scale), oy - 6))
     dc.draw_balloon(ox + (62.00 * scale) - 12, oy - 20, "C4", leader_to=(ox + (62.00 * scale), oy - 6))
     dc.draw_balloon(ox + 22, oy + 4, "G4", leader_to=(ox + 6, oy))
     
     # Weld Notes
-    dc.draw_weld_callout(ox + 130, oy + 40, "3/16 FILLET ALL AROUND (TYP)", leader_to=(ox + (18.00 * scale), oy + deck_w/2 - m_thk))
+    dc.draw_weld_callout(ox + 96, oy + 46, "3/16 FILLET ALL AROUND (TYP)", leader_to=(ox + (18.00 * scale), oy + deck_w/2 - m_thk))
     dc.draw_weld_callout(ox + 210, oy - deck_w/2 - 28, "3/16 FILLET BOTH SIDES", leader_to=(ox + (38.00 * scale), oy - deck_w/2 + m_thk))
 
 def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
@@ -598,8 +634,18 @@ def draw_sheet_s3(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_v(oy - m_thk, oy, ox - stinger_ins - 15, "2\" FRAME")
     dc.draw_dim_v(oy - 2*m_thk, oy, ox - stinger_ins - 32, "FRAME + MOUNT TUBE")
     dc.draw_dim_v(oy, oy + guide_h, ox + deck_l + 20, f"GUIDE = {fraction_str(params.flared_guide_height)}")
-    dc.draw_dim_h(ox - stinger_ins, ox, oy - 2*m_thk - 22, "INSERTION: FIELD FIT TO TRUCK")
-    dc.draw_dim_h(ox, ox + stinger_ovl, oy - 2*m_thk - 22, f"RUNS BACK {fraction_str(params.stinger_overlap_length)} UNDER THE DECK")
+    dc.draw_dim_h(ox - stinger_ins, ox, oy - 2*m_thk - 34, "INTO THE TRUCK SOCKET: FIELD FIT")
+    dc.draw_dim_h(ox, ox + stinger_ovl, oy - 2*m_thk - 20,
+                  f"MOUNTING TUBE RUNS BACK {fraction_str(params.stinger_overlap_length)}")
+    # label the three mount beams that appear in this elevation
+    c.setFont("Helvetica-Bold", 6.0)
+    c.setFillColor(colors.HexColor("#003566"))
+    for i, x0 in enumerate(params.mount_beam_stations, start=1):
+        bx = ox + (x0 + 1.0) * scale
+        c.drawCentredString(bx, oy - 2*m_thk - 8, f"MB{i}")
+    c.setFont("Helvetica-Bold", 7.5)
+    c.drawString(ox - stinger_ins, oy + guide_h + 24, "TRUCK SIDE")
+    c.drawRightString(ox + deck_l, oy + guide_h + 24, "RAMP SIDE")
     dc.draw_dim_h(ox, ox + deck_l, oy + guide_h + 16, f"OVERALL DECK = {fraction_str(params.carrier_deck_length)}")
     
     # SECTION A-A (Enlarged Detail)
@@ -652,7 +698,7 @@ def draw_sheet_s4(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_border_and_title_block("S4", "TRUCK MOUNT - FIELD FIT TO TRUCK", 4, 9)
     c = dc.c
 
-    ox, oy, scale = 250.0, 320.0, 5.4
+    ox, oy, scale = 260.0, 355.0, 5.0
     spacing = params.stinger_spacing_model_nominal * scale
     tube_w = 2.0 * scale
     sleeve_w = 2.5 * scale
@@ -661,31 +707,31 @@ def draw_sheet_s4(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
 
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(ox - 185, 545.0, "TRUCK MOUNT - PLAN LOOKING DOWN")
+    c.drawString(60, 545.0, "TRUCK MOUNT - PLAN LOOKING DOWN")
     c.setFont("Helvetica-Bold", 7.5)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(ox - 185, 533.0,
+    c.drawString(60, 532.0,
                  "THE TRUCK SETS THE SPACING. THERE IS NO SPACING DIMENSION ON THIS SHEET.")
-
-    # Front face of the deck frame
-    dc.draw_centerline(ox, oy - spacing / 2 - 30, ox, oy + spacing / 2 + 30)
-    c.setFont("Helvetica-Bold", 6.5)
-    c.setFillColor(colors.HexColor("#D90429"))
-    c.drawCentredString(ox, oy + spacing / 2 + 36, "TRUCK SIDE - FRONT FACE OF DECK (X = 0)")
 
     # Deck side rails, so it is obvious where the tubes sit relative to them
     rail_y = (params.carrier_width / 2.0) * scale
     c.setStrokeColor(colors.HexColor("#ADB5BD"))
-    c.setLineWidth(0.6)
+    c.setLineWidth(0.7)
     for sgn in (-1, 1):
-        y = oy + sgn * rail_y
-        c.line(ox, y, ox + params.carrier_deck_length * scale, y)
+        yy = oy + sgn * rail_y
+        c.line(ox, yy, ox + params.carrier_deck_length * scale, yy)
     c.setFont("Helvetica", 5.5)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawString(ox + 8, oy + rail_y + 3, "OUTSIDE OF DECK SIDE RAIL M1")
+    c.drawString(ox + 6, oy + rail_y + 4, "OUTSIDE OF DECK SIDE RAIL M1-R")
+    c.drawString(ox + 6, oy - rail_y - 10, "OUTSIDE OF DECK SIDE RAIL M1-L")
 
-    # The three under-deck mount beams
-    c.setFillColor(colors.HexColor("#4361EE"))
+    # Front face of the deck
+    dc.draw_centerline(ox, oy - spacing / 2 - 44, ox, oy + spacing / 2 + 34)
+    c.setFont("Helvetica-Bold", 6.5)
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.drawCentredString(ox + 4, oy + spacing / 2 + 40, "TRUCK SIDE - FRONT FACE OF DECK (X = 0)")
+
+    # Three under-deck mount beams
     c.setStrokeColor(colors.HexColor("#0D1B2A"))
     c.setLineWidth(1.2)
     for i, x0 in enumerate(params.mount_beam_stations, start=1):
@@ -693,59 +739,62 @@ def draw_sheet_s4(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         c.setFillColor(colors.HexColor("#A2C4F4"))
         c.rect(bx, oy - spacing / 2 + sleeve_w / 2, 2.0 * scale,
                spacing - sleeve_w, fill=1, stroke=1)
-        dc.draw_balloon(bx + scale, oy - spacing / 2 - 34 - (i % 2) * 14, f"MB{i}",
-                        leader_to=(bx + scale, oy - spacing / 2 + sleeve_w / 2))
+        dc.draw_balloon(bx + scale, oy + spacing / 2 - 26 - ((i - 1) % 2) * 20,
+                        f"MB{i}",
+                        leader_to=(bx + scale, oy + spacing / 2 - sleeve_w / 2))
 
     # The two mounting tubes with their slip-on sleeves
-    for sgn in (-1, 1):
+    for sgn, side in ((-1, "L"), (1, "R")):
         sy = oy + sgn * (spacing / 2.0)
         c.setFillColor(colors.HexColor("#CED4DA"))
         c.setStrokeColor(colors.black)
         c.setLineWidth(1.2)
         c.rect(ox - ins_l, sy - tube_w / 2, ins_l + ovl_l, tube_w, fill=1, stroke=1)
-        # sleeve, drawn outboard of the socket only
         c.setFillColor(colors.HexColor("#8D99AE"))
         c.rect(ox + 0.5 * scale, sy - sleeve_w / 2,
                params.stinger_sleeve_length * scale, sleeve_w, fill=1, stroke=1)
-        dc.draw_centerline(ox - ins_l - 12, sy, ox + ovl_l + 12, sy)
-        pin_x = ox - ins_l + params.hitch_pin_hole_setback * scale
+        dc.draw_centerline(ox - ins_l - 12, sy, ox + ovl_l + 14, sy)
         c.setFillColor(colors.HexColor("#D90429"))
-        c.circle(pin_x, sy, 2.5, fill=1, stroke=1)
+        c.circle(ox - ins_l + params.hitch_pin_hole_setback * scale, sy, 2.5,
+                 fill=1, stroke=1)
+        dc.draw_balloon(ox + ovl_l + 40, sy, f"S1-{side}",
+                        leader_to=(ox + ovl_l - 6, sy))
+        dc.draw_balloon(ox + 30 * scale, sy - sgn * 24, f"SL-{side}",
+                        leader_to=(ox + 30 * scale, sy - sgn * sleeve_w / 2))
 
-    dc.draw_balloon(ox + ovl_l + 30, oy - spacing / 2, "S1-L",
-                    leader_to=(ox + ovl_l - 10, oy - spacing / 2))
-    dc.draw_balloon(ox + ovl_l + 30, oy + spacing / 2, "S1-R",
-                    leader_to=(ox + ovl_l - 10, oy + spacing / 2))
-    dc.draw_balloon(ox + 14 * scale, oy + spacing / 2 + 30, "SL-R",
-                    leader_to=(ox + 14 * scale, oy + spacing / 2 + sleeve_w / 2))
-
-    # Callouts instead of dimensions where the truck governs
+    # Callouts where the truck governs - words, not numbers
     c.setFont("Helvetica-Bold", 6.5)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawCentredString(ox - ins_l / 2, oy + spacing / 2 + 16, "FIELD FIT TO TRUCK")
-    c.drawCentredString(ox - ins_l / 2, oy - spacing / 2 - 16,
+    c.drawCentredString(ox - ins_l / 2, oy + spacing / 2 + 14, "FIELD FIT TO TRUCK")
+    c.drawCentredString(ox - ins_l / 2, oy - spacing / 2 - 22,
                         "TRANSFER PIN HOLES FROM TRUCK")
-    c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawCentredString(ox, oy, "CUT MB1 / MB2 / MB3 TO FIT")
+    c.setFillColor(colors.HexColor("#003566"))
+    c.drawCentredString(ox + 21 * scale, oy + 4, "CUT MB1 / MB2 / MB3 TO FIT")
+    c.setFont("Helvetica", 6.0)
+    c.drawCentredString(ox + 21 * scale, oy - 7,
+                       "between the two mounting tubes - approx 35\" each")
 
-    # Only dimensions that are genuinely ours to give
-    dc.draw_dim_h(ox, ox + ovl_l, oy + spacing / 2 + 46,
-                  f"MOUNTING TUBE RUNS BACK {fraction_str(params.stinger_overlap_length)}")
+    # The only dimensions that are genuinely ours to give
+    dc.draw_dim_h(ox, ox + ovl_l, oy + spacing / 2 + 56,
+                  "MOUNTING TUBE RUNS BACK 40\"")
     for i, x0 in enumerate(params.mount_beam_stations, start=1):
         dc.draw_dim_h(ox, ox + (x0 + 1.0) * scale,
-                      oy - spacing / 2 - 46 - i * 14,
+                      oy - spacing / 2 - 44 - i * 17,
                       f"MB{i} CENTRE = {fraction_str(x0 + 1.0)} FROM TRUCK SIDE")
 
-    dc.draw_unverified_banner(
-        50.0, 45.0, 470.0, 66.0,
-        "1. SLIDE BOTH MOUNTING TUBES INTO THE TRUCK'S OWN SOCKETS. THE TRUCK SETS THE\n"
-        "   SPACING - DO NOT MEASURE IT, DO NOT LAY IT OUT.\n"
-        "2. CLAMP THE DECK SQUARE BEHIND THE TRUCK, THEN CUT MB1/MB2/MB3 TO FIT BETWEEN\n"
-        "   THE TUBES. TACK FIRST - TEST FIT BEFORE FINAL WELD.\n"
-        "3. SLIP THE SLEEVES ON UP AGAINST THE SOCKET FACES. NOTHING THAT GOES INSIDE\n"
-        "   THE SOCKET IS CHANGED. NOTHING IS WELDED OR BOLTED TO THE TRUCK.\n"
-        "4. PULL THE CARRIER OFF THE TRUCK AND FINISH WELD ON THE GROUND."
-    )
+    dc.draw_note_box(
+        55.0, 46.0, 415.0, 60.0,
+        "1. Slide both mounting tubes into the truck's own sockets and pin them. "
+        "The truck sets the spacing - do not measure it, do not lay it out.\n"
+        "2. Roll the deck up behind the truck, set it level and square, and clamp "
+        "it to the tubes.\n"
+        "3. Cut MB1 / MB2 / MB3 to fit between the tubes. Clamp and TACK ONLY.\n"
+        "4. Slip the sleeves on up against the socket faces and tack. Nothing "
+        "inside the socket is changed. Nothing is welded or bolted to the truck.\n"
+        "5. Pull the pins, take the carrier off the truck, and finish weld "
+        "everything on the ground.",
+        heading="TRUCK MOUNT FIT-UP - IN THIS ORDER")
+
 
 def draw_sheet_s5(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
     """Sheet S5: Ramp Weldment - Plan View"""
@@ -835,7 +884,7 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(ox - 60, 535.0, "RAMP ELEVATION: 90° UPRIGHT TRANSPORT & 16.2° DEPLOYED PROFILES")
+    c.drawString(ox - 60, 535.0, f"RAMP: {assembly.get('ramp_angle_deg', 0):.0f} DEG DOWN ON THE GROUND, 90 DEG UPRIGHT FOR TRAVEL")
     
     # Carrier Rear End Stub
     c.setFillColor(colors.HexColor("#DEE2E6"))
@@ -853,7 +902,7 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.line(ox - 30, ground_y, ox + dx + 15, ground_y)
     c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.HexColor("#6C757D"))
-    c.drawString(ox + dx + 20, ground_y - 2, "GROUND LEVEL (Z = -17\")")
+    c.drawString(ox - 30, ground_y + 6, f"GROUND LEVEL (DECK IS {fraction_str(params.deck_height)} UP)")
     
     # Deployed Ramp Member
     c.setStrokeColor(colors.black)
@@ -874,104 +923,137 @@ def draw_sheet_s6(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_h(ox, ox + dx, ground_y - 16, f"GROUND HORIZ SPAN = {fraction_str(dx/scale)}")
     
     # ENLARGED HINGE DETAIL VIEW (Cleanly positioned in open upper-right quadrant)
-    det_x = 510.0
-    det_y = 370.0
-    det_scale = 13.0
-    
-    c.setFont("Helvetica-Bold", 8.5)
-    c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(det_x - 60, det_y + 80, "DETAIL B: HINGE - BARREL SITS IN THE CORNER")
-    c.setFont("Helvetica-Bold", 6.5)
-    c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(det_x - 60, det_y + 70,
-                 "GAP DECK TO RAMP = ONE BARREL DIAMETER")
+    det_x = 560.0
+    det_y = 388.0
+    det_scale = 34.0
 
     od = params.hinge_barrel_od
     rr = od / 2.0
-    # Carrier rear cross tube C4 (deck top at det_y)
+
+    c.setFont("Helvetica-Bold", 9.0)
+    c.setFillColor(colors.HexColor("#001D3D"))
+    c.drawString(det_x - 130, det_y + 150, "DETAIL B: HINGE - LOOKING FROM THE SIDE")
+    c.setFont("Helvetica-Bold", 7.0)
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.drawString(det_x - 130, det_y + 138,
+                 f"THE GAP BETWEEN DECK AND RAMP IS ONE BARREL DIAMETER ({fraction_str(od)})")
+
+    # Carrier rear cross tube C4 (deck top sits at det_y)
     c.setFillColor(colors.HexColor("#DEE2E6"))
     c.setStrokeColor(colors.black)
-    c.rect(det_x - (2.0 * det_scale), det_y - 2.0 * det_scale,
+    c.setLineWidth(1.0)
+    c.rect(det_x - 2.0 * det_scale, det_y - 2.0 * det_scale,
            2.0 * det_scale, 2.0 * det_scale, fill=1, stroke=1)
     # Ramp head cross tube RC1, one barrel diameter away
     c.rect(det_x + od * det_scale, det_y - 2.0 * det_scale,
            2.0 * det_scale, 2.0 * det_scale, fill=1, stroke=1)
+    c.setFont("Helvetica-Bold", 8.0)
+    c.setFillColor(colors.HexColor("#343A40"))
+    c.drawCentredString(det_x - det_scale, det_y - det_scale - 3, "C4")
+    c.drawCentredString(det_x + (od + 1.0) * det_scale, det_y - det_scale - 3, "RC1")
+    c.setFont("Helvetica", 6.0)
+    c.drawCentredString(det_x - det_scale, det_y - det_scale - 14, "CARRIER")
+    c.drawCentredString(det_x + (od + 1.0) * det_scale, det_y - det_scale - 14, "RAMP")
+
+    # Top of frame line
+    c.setStrokeColor(colors.HexColor("#4361EE"))
+    c.setLineWidth(1.2)
+    c.line(det_x - 2.3 * det_scale, det_y, det_x - 1.1 * det_scale, det_y)
+    c.line(det_x + (od + 1.1) * det_scale, det_y,
+           det_x + (od + 2.3) * det_scale, det_y)
+    c.setFont("Helvetica-Bold", 6.0)
+    c.setFillColor(colors.HexColor("#4361EE"))
+    c.drawRightString(det_x - 2.4 * det_scale, det_y - 2, "TOP OF FRAME")
+
     # Barrel, tangent to the deck top and to the cross tube face
     cx = det_x + rr * det_scale
     cy = det_y + rr * det_scale
+    c.setStrokeColor(colors.black)
     c.setFillColor(colors.HexColor("#495057"))
     c.circle(cx, cy, rr * det_scale, fill=1, stroke=1)
     c.setFillColor(colors.white)
     c.circle(cx, cy, (params.hinge_barrel_id / 2.0) * det_scale, fill=1, stroke=1)
     c.setFillColor(colors.HexColor("#D90429"))
     c.circle(cx, cy, (params.hinge_pin_dia / 2.0) * det_scale, fill=1, stroke=1)
-    # Deck top line
-    c.setStrokeColor(colors.HexColor("#4361EE"))
-    c.setLineWidth(1.2)
-    c.line(det_x - 2.2 * det_scale, det_y, det_x + 3.4 * det_scale, det_y)
-    c.setFont("Helvetica-Bold", 5.5)
-    c.setFillColor(colors.HexColor("#4361EE"))
-    c.drawString(det_x - 2.2 * det_scale, det_y + 3, "TOP OF FRAME")
-    c.setFillColor(colors.HexColor("#343A40"))
-    c.drawCentredString(det_x - det_scale, det_y - det_scale, "C4")
-    c.drawCentredString(det_x + (od + 1.0) * det_scale, det_y - det_scale, "RC1")
-    c.setFont("Helvetica", 5.5)
-    c.setFillColor(colors.HexColor("#343A40"))
-    c.drawString(det_x - 60, det_y - 34,
-                 "Barrel bottom flush with the top of the frame.")
-    c.drawString(det_x - 60, det_y - 42,
-                 "Barrel back against the cross tube face.")
-    c.drawString(det_x - 60, det_y - 50,
-                 "Fillet above and below, full length of the barrel.")
-    dc.draw_dim_h(det_x, det_x + od * det_scale, det_y - 2.6 * det_scale,
-                  f"GAP = {fraction_str(od)}")
-    dc.draw_balloon(det_x + 55, det_y + 45, "P1", leader_to=(cx, cy))
-    dc.draw_weld_callout(det_x + 60, det_y + 18, "1/4 FILLET EACH SIDE OF BARREL",
-                         leader_to=(cx + 3, cy - 4))
 
-    c.setFont("Helvetica-Bold", 6.0)
+    dc.draw_balloon(cx + 78, cy + 46, "P1", leader_to=(cx, cy))
+    dc.draw_weld_callout(cx + 78, cy - 44, "1/4 FILLET TOP AND BOTTOM",
+                         leader_to=(cx + rr * det_scale * 0.7, cy - rr * det_scale * 0.7))
+    dc.draw_dim_h(det_x, det_x + od * det_scale, det_y - 2.7 * det_scale,
+                  f"GAP = {fraction_str(od)}")
+
+    # Plain shop words, well clear of the drawing
+    c.setFont("Helvetica-Bold", 7.0)
     c.setFillColor(colors.HexColor("#0D1B2A"))
-    c.drawString(det_x - 60, det_y - 62,
-                 f"BARREL: {fraction_str(params.hinge_barrel_od)} OD x "
-                 f"{fraction_str(params.hinge_barrel_wall)} WALL DOM, "
-                 f"{fraction_str(params.hinge_barrel_id)} BORE - "
-                 f"{params.hinge_barrel_count} OFF x "
-                 f"{fraction_str(params.hinge_barrel_length)}")
-    c.drawString(det_x - 60, det_y - 71,
-                 f"PIN: {fraction_str(params.hinge_pin_dia)} CF ROUND BAR x "
-                 f"{fraction_str(params.hinge_pin_length)}, ONE PIECE. "
-                 f"1/8\" LOOSE ON PURPOSE - NO REAMING.")
+    c.drawString(det_x - 130, det_y - 3.6 * det_scale, "HOW IT GOES TOGETHER")
+    c.setFont("Helvetica", 6.3)
+    c.setFillColor(colors.HexColor("#343A40"))
+    steps = [
+        f"1. Cut {params.hinge_barrel_count} barrels {fraction_str(params.hinge_barrel_length)} long "
+        f"from {fraction_str(od)} OD x {fraction_str(params.hinge_barrel_wall)} wall tube.",
+        "2. Slide them all onto the pin, alternating: carrier, ramp, carrier, ramp...",
+        "   The two on the outside ends belong to the carrier.",
+        "3. Set the deck and ramp nose to nose with one barrel diameter between them.",
+        "4. Drop the pin assembly in the corner - barrel bottoms flush with the top of",
+        "   the frames, barrel backs against the cross tube faces. Clamp. TACK ONLY.",
+        "5. Swing the ramp by hand, ground to straight up. If it rubs, ease the leading",
+        "   edge of the cross tube with a grinder until it swings free.",
+        "6. Only then weld the barrels out - fillet above and below, full length.",
+    ]
+    yy = det_y - 3.6 * det_scale - 12
+    for line in steps:
+        c.drawString(det_x - 130, yy, line)
+        yy -= 9
+
+    c.setFont("Helvetica-Bold", 6.3)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(det_x - 60, det_y - 80,
-                 "TACK FIRST. CHECK RAMP SWING BEFORE FINAL WELD.")
+    yy -= 4
+    c.drawString(det_x - 130, yy,
+                 f"PIN: {fraction_str(params.hinge_pin_dia)} cold-finished round bar x "
+                 f"{fraction_str(params.hinge_pin_length)}, one piece. Hairpin clip "
+                 f"1/2\" in from each end.")
+    yy -= 9
+    c.drawString(det_x - 130, yy,
+                 f"BORE IS {fraction_str(params.hinge_barrel_id)} ON A "
+                 f"{fraction_str(params.hinge_pin_dia)} PIN - 1/8\" LOOSE ON PURPOSE. "
+                 f"DO NOT REAM IT.")
 
 def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
     """Sheet S7: Individual Fabricated Parts, Gussets, & Brackets"""
-    dc.draw_border_and_title_block("S7", "INDIVIDUAL FABRICATED PARTS - GUSSETS, GUARDS, & BRACKETS", 7, 9)
+    dc.draw_border_and_title_block("S7", "SMALL PARTS - MOUNT BEAMS, BARRELS, GUARDS & BRACKETS", 7, 9)
     c = dc.c
     
     scale = 14.0
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(60.0, 535.0, "INDIVIDUAL FABRICATED PARTS - SHEAR, LASER, & DRILL DETAILS")
+    c.drawString(60.0, 535.0, "SMALL PARTS - WHAT TO CUT AND DRILL")
     
-    # Row 1, Column 1: G1 Stinger Gusset
+    # Row 1, Column 1: under-deck mount beams (the old G1 gussets are gone)
     g1_x = 75.0
     g1_y = 370.0
     c.setFont("Helvetica-Bold", 8.0)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(g1_x, g1_y + 75, "PART G1: STINGER GUSSET (QTY: 4)")
+    c.drawString(g1_x, g1_y + 75, "MOUNT BEAMS MB1-MB3 (QTY: 3)")
     c.setFont("Helvetica", 6.0)
-    c.drawString(g1_x, g1_y + 66, "1/4\" A36 PLATE - (2 FRONT AT C1, 2 REAR AT C2)")
-    
-    c.setFillColor(colors.HexColor("#E9ECEF"))
+    c.drawString(g1_x, g1_y + 66,
+                 f"{params.mount_beam_section} - CUT TO FIT, APPROX 35\" EACH")
+
+    c.setFillColor(colors.HexColor("#A2C4F4"))
     c.setStrokeColor(colors.black)
     c.setLineWidth(1.2)
-    dc.draw_polygon([(g1_x, g1_y), (g1_x + (8.0 * scale/2), g1_y), (g1_x, g1_y + (4.0 * scale/2))], fill=1, stroke=1)
-    dc.draw_dim_h(g1_x, g1_x + (8.0 * scale/2), g1_y - 12, "8.0\" BASE")
-    dc.draw_dim_v(g1_y, g1_y + (4.0 * scale/2), g1_x - 12, "4.0\" HT")
-    dc.draw_balloon(g1_x + 22, g1_y + 12, "G1")
-    
+    c.rect(g1_x, g1_y, 110.0, 2.0 * scale / 2, fill=1, stroke=1)
+    dc.draw_dim_h(g1_x, g1_x + 110.0, g1_y - 12, "CUT TO FIT")
+    dc.draw_balloon(g1_x + 128, g1_y + 7, "MB", leader_to=(g1_x + 110.0, g1_y + 7))
+    c.setFont("Helvetica-Bold", 5.5)
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.drawString(g1_x, g1_y - 26, "DO NOT CUT THESE IN THE SHOP.")
+    c.drawString(g1_x, g1_y - 34, "CUT THEM WITH THE CARRIER ON THE TRUCK,")
+    c.drawString(g1_x, g1_y - 42, "TO FIT BETWEEN THE TWO MOUNTING TUBES.")
+    c.setFillColor(colors.HexColor("#343A40"))
+    c.setFont("Helvetica", 5.5)
+    c.drawString(g1_x, g1_y - 54, "Square ends. Weld all round to the sleeves,")
+    c.drawString(g1_x, g1_y - 62, "and up to the rails where they cross. No gussets.")
+
     # Row 1, Column 2: G2 Rear Light Guard Plate
     g2_x = 285.0
     g2_y = 370.0
@@ -991,8 +1073,9 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.roundRect(g2_x + gw/2 - (6.75*scale/4), g2_y + gh/2 - (2.5*scale/4), 6.75*scale/2, 2.5*scale/2, 8, fill=1, stroke=1)
     c.setFont("Helvetica-Bold", 5.5)
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawCentredString(g2_x + gw/2, g2_y + gh/2 + 2, "6.75\" x 2.50\"")
-    c.drawCentredString(g2_x + gw/2, g2_y + gh/2 - 6, "OVAL LED CUTOUT")
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.setFont("Helvetica-Bold", 5.5)
+    c.drawString(g2_x, g2_y - 26, "6 3/4\" x 2 1/2\" OVAL FOR A 6\" LED LAMP")
     
     dc.draw_dim_h(g2_x, g2_x + gw, g2_y - 12, "8.0\" WIDTH")
     dc.draw_dim_v(g2_y, g2_y + gh, g2_x - 12, "6.0\" HEIGHT")
@@ -1065,105 +1148,114 @@ def draw_sheet_s7(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     dc.draw_dim_h(g5_x, g5_x + 11.5 * scale/3, g5_y - 12, "11.50\" CUT")
     dc.draw_balloon(g5_x + 15, g5_y + 12, "G5")
 
+def _fit(c, text: str, width: float, font: str = "Helvetica",
+         size: float = 6.0) -> str:
+    """Trim text to the column width, with an ellipsis so nothing looks complete
+    when it is not."""
+    text = text or ""
+    if c.stringWidth(text, font, size) <= width:
+        return text
+    while text and c.stringWidth(text + "...", font, size) > width:
+        text = text[:-1]
+    return text + "..."
+
+
 def draw_sheet_s8(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any]):
-    """Sheet S8: Material Schedule & Bill of Materials"""
+    """Sheet S8: every piece in the carrier. Nothing is allowed to fall off."""
     dc.draw_border_and_title_block("S8", "BILL OF MATERIALS & FABRICATION SCHEDULE", 8, 9)
     c = dc.c
-    
+
     ox = 55.0
-    oy = 520.0
-    
+    oy = 528.0
+    bom = assembly.get("bom", [])
+
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(ox, oy, "BILL OF MATERIALS - COMPLETE PIECE & CUT SCHEDULE")
-    
-    cols = [
-        ("MARK", 42),
-        ("DESCRIPTION", 130),
-        ("ASSY", 60),
-        ("SECTION / SIZE", 95),
-        ("GRADE", 75),
-        ("CUT LENGTH", 55),
-        ("QTY", 28),
-        ("WT (LB)", 45),
-        ("NOTES", 130)
-    ]
-    
-    y = oy - 18
-    c.setFillColor(colors.HexColor("#003566"))
-    c.rect(ox, y - 4, 660, 15, fill=1, stroke=0)
-    
-    cur_x = ox + 4
+    c.drawString(ox, oy, f"BILL OF MATERIALS - ALL {len(bom)} PIECES")
     c.setFont("Helvetica-Bold", 6.5)
+    c.setFillColor(colors.HexColor("#D90429"))
+    c.drawString(ox + 250, oy,
+                 "CUT TO FIT = do not cut to the length shown; fit it on the job.")
+
+    cols = [("MARK", 40), ("DESCRIPTION", 128), ("ASSY", 56),
+            ("SECTION / SIZE", 92), ("GRADE", 70), ("CUT LEN", 48),
+            ("QTY", 24), ("WT", 34), ("NOTES", 168)]
+    table_w = sum(w for _n, w in cols) + 8
+
+    y = oy - 16
+    c.setFillColor(colors.HexColor("#003566"))
+    c.rect(ox, y - 4, table_w, 14, fill=1, stroke=0)
+    cur_x = ox + 4
+    c.setFont("Helvetica-Bold", 6.0)
     c.setFillColor(colors.white)
     for name, w in cols:
         c.drawString(cur_x, y, name)
         cur_x += w
-        
-    y -= 13
-    bom = assembly.get("bom", [])
-    tot_wt = 0.0
-    
-    c.setFont("Helvetica", 6.0)
+
+    y -= 11
+    row_h = 8.4
     for i, row in enumerate(bom):
-        # Stop table well above title block area
-        if y < 140:
-            break
-        bg = colors.HexColor("#F8F9FA") if i % 2 == 0 else colors.white
+        bg = colors.HexColor("#F1F3F5") if i % 2 == 0 else colors.white
         c.setFillColor(bg)
-        c.rect(ox, y - 3, 660, 11, fill=1, stroke=0)
-        
-        c.setFillColor(colors.black)
+        c.rect(ox, y - 2.4, table_w, row_h, fill=1, stroke=0)
+
+        field_fit = bool(row.get("field_fit"))
         cur_x = ox + 4
-        c.setFont("Helvetica-Bold", 6.0)
+        c.setFillColor(colors.HexColor("#B7094C") if field_fit else colors.black)
+        c.setFont("Helvetica-Bold", 5.8)
         c.drawString(cur_x, y, row.get("piece_mark", ""))
-        cur_x += 42
-        
-        c.setFont("Helvetica", 6.0)
-        c.drawString(cur_x, y, row.get("description", "")[:28])
-        cur_x += 130
-        c.drawString(cur_x, y, row.get("assembly", ""))
-        cur_x += 60
-        c.drawString(cur_x, y, row.get("size", "")[:18])
-        cur_x += 95
-        c.drawString(cur_x, y, row.get("grade", "")[:15])
-        cur_x += 75
-        c.drawString(cur_x, y, fraction_str(row.get("cut_length", 0.0)))
-        cur_x += 55
-        c.drawString(cur_x, y, str(row.get("quantity", 1)))
-        cur_x += 28
-        wt = float(row.get("total_weight", 0.0))
-        tot_wt += wt
-        c.drawString(cur_x, y, f"{wt:.1f}")
-        cur_x += 45
-        c.drawString(cur_x, y, row.get("notes", "")[:35])
-        
-        y -= 11
-        
-    # Structural Status and Weight Summary Box (Zero overlap with title block)
+        cur_x += cols[0][1]
+
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 5.8)
+        for value, (_n, w) in zip(
+                [row.get("description", ""),
+                 row.get("assembly", ""),
+                 row.get("size", ""),
+                 row.get("grade", ""),
+                 fraction_str(row.get("cut_length", 0.0)),
+                 str(row.get("quantity", 1)),
+                 f"{float(row.get('total_weight', 0.0)):.1f}"],
+                cols[1:8]):
+            c.drawString(cur_x, y, _fit(c, value, w - 4, "Helvetica", 5.8))
+            cur_x += w
+
+        note = row.get("notes", "")
+        if field_fit:
+            note = "CUT TO FIT - " + note.split("CUT TO FIT - ", 1)[-1]
+            c.setFillColor(colors.HexColor("#B7094C"))
+            c.setFont("Helvetica-Bold", 5.8)
+        c.drawString(cur_x, y, _fit(c, note, cols[8][1] - 4, "Helvetica", 5.8))
+        y -= row_h
+
+    # Summary box, clear of both the table and the title block.
+    box_h = 54.0
     c.setFillColor(colors.HexColor("#FFF3CD"))
     c.setStrokeColor(colors.HexColor("#856404"))
-    c.rect(ox, 50.0, 420.0, 52.0, fill=1, stroke=1)
-    
+    c.setLineWidth(1.0)
+    c.rect(ox, 48.0, 410.0, box_h, fill=1, stroke=1)
+
+    st = assembly.get("structural", {})
     c.setFillColor(colors.HexColor("#D90429"))
     c.setFont("Helvetica-Bold", 7.5)
-    st = assembly.get("structural", {})
-    c.drawString(ox + 8, 90.0,
-                 f"STRENGTH CHECK: [{st.get('status', '?')}] - nothing yields "
+    c.drawString(ox + 8, 48.0 + box_h - 14,
+                 f"STRENGTH CHECK [{st.get('status', '?')}] - nothing yields "
                  f"below about {st.get('yields_at_g', 0):.1f} g")
     c.setFillColor(colors.HexColor("#0D1B2A"))
     c.setFont("Helvetica", 6.5)
-    c.drawString(ox + 8, 78.0,
-                 f"CARRIER: {tot_wt:.0f} LB | MACHINE AND LOAD: "
-                 f"{st.get('payload_weight', 0):.0f} LB | TOTAL ON THE TRUCK: "
-                 f"{st.get('total_suspended_weight', 0):.0f} LB")
-    notes = st.get("notes", [])
-    if len(notes) > 2:
-        c.drawString(ox + 8, 67.0, notes[2][:120])
+    c.drawString(ox + 8, 48.0 + box_h - 26,
+                 f"CARRIER {assembly.get('total_carrier_weight', 0):.0f} LB  |  "
+                 f"MACHINE AND LOAD {st.get('payload_weight', 0):.0f} LB  |  "
+                 f"TOTAL ON THE TRUCK {st.get('total_suspended_weight', 0):.0f} LB")
+    c.drawString(ox + 8, 48.0 + box_h - 37,
+                 "Welds: 3/16 fillet on the frame tubes, 1/4 on the mount beams, "
+                 "sleeves and hinge barrels.")
     c.setFillColor(colors.HexColor("#D90429"))
-    c.drawString(ox + 8, 56.0,
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawString(ox + 8, 48.0 + box_h - 48,
                  "The sleeves over the mounting tubes are structural. Do not "
                  "leave them off.")
+
 
 def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[str, Any], stock_data: Dict[str, Any]):
     """Sheet S9: Stock Cutting Plan & Material Purchasing Requirements"""
@@ -1182,7 +1274,7 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     bar_w = 440.0
     
     for i, stick in enumerate(stock_plan):
-        if y < 140:
+        if y < 190:
             break
             
         stk_id = stick.get("stick_id", f"STK-{i+1:02d}")
@@ -1224,45 +1316,43 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
             
         y -= 22
         
-    # Purchasing Summary Box (Cleanly on left bottom, zero overlap with title block)
-    purch_y = 28.0
+    # ---- What to buy. Put the whole list on the sheet, in one column each,
+    #      sized to what is actually there instead of a fixed five rows. ----
+    purchase = stock_data.get("purchase_list", [])
+    linear = [p for p in purchase if p.get("category") == "LINEAR_STOCK"]
+    other = [p for p in purchase if p.get("category") != "LINEAR_STOCK"]
+
+    def _row_text(prow):
+        wt = prow.get("total_purchased_weight", 0.0)
+        wt_str = f" - {wt:.0f} lb" if wt > 0 else ""
+        return (f"{prow.get('quantity', 1)}x {prow.get('section', '')} "
+                f"({prow.get('unit_size', '')}){wt_str}")
+
+    lead = 7.6
+    rows = max(len(linear), len(other))
+    box_h = 26.0 + rows * lead
+    purch_y = 46.0
+    box_w = 400.0
     c.setFillColor(colors.HexColor("#F8F9FA"))
     c.setStrokeColor(colors.HexColor("#003566"))
-    c.rect(ox, purch_y, 400.0, 66.0, fill=1, stroke=1)
+    c.setLineWidth(1.0)
+    c.rect(ox, purch_y, box_w, box_h, fill=1, stroke=1)
     c.setFont("Helvetica-Bold", 7.0)
     c.setFillColor(colors.HexColor("#003566"))
-    c.drawString(ox + 8, purch_y + 54, "COMPREHENSIVE MATERIAL PURCHASING SCHEDULE (ORDER LIST)")
-    
-    # Column 1: Linear Stock
-    c.setFont("Helvetica-Bold", 5.5)
-    c.setFillColor(colors.HexColor("#333333"))
-    c.drawString(ox + 8, purch_y + 44, "LINEAR STOCK:")
-    py1 = purch_y + 35
-    c.setFont("Helvetica", 5.2)
-    c.setFillColor(colors.black)
-    for prow in [p for p in stock_data.get("purchase_list", []) if p.get("category") == "LINEAR_STOCK"][:5]:
-        sec = prow.get("section", "")
-        qty = prow.get("quantity", 1)
-        unit = prow.get("unit_size", "")
-        wt = prow.get("total_purchased_weight", 0.0)
-        c.drawString(ox + 8, py1, f"• {qty}x {sec} ({unit}) - {wt:.1f} lb")
-        py1 -= 7.5
-        
-    # Column 2: Plate, Grating, & Hardware
-    c.setFont("Helvetica-Bold", 5.5)
-    c.setFillColor(colors.HexColor("#333333"))
-    c.drawString(ox + 205, purch_y + 44, "PLATE, GRATING & HARDWARE:")
-    py2 = purch_y + 35
-    c.setFont("Helvetica", 5.2)
-    c.setFillColor(colors.black)
-    for prow in [p for p in stock_data.get("purchase_list", []) if p.get("category") != "LINEAR_STOCK"][:5]:
-        sec = prow.get("section", "")
-        qty = prow.get("quantity", 1)
-        unit = prow.get("unit_size", "")
-        wt = prow.get("total_purchased_weight", 0.0)
-        wt_str = f" - {wt:.1f} lb" if wt > 0 else ""
-        c.drawString(ox + 205, py2, f"• {qty}x {sec[:28]} ({unit}){wt_str}")
-        py2 -= 7.5
+    c.drawString(ox + 8, purch_y + box_h - 11, "WHAT TO BUY")
+
+    for x_off, heading, rowset in ((8.0, "STEEL BY THE STICK:", linear),
+                                   (205.0, "PLATE, GRATING & HARDWARE:", other)):
+        c.setFont("Helvetica-Bold", 5.5)
+        c.setFillColor(colors.HexColor("#333333"))
+        c.drawString(ox + x_off, purch_y + box_h - 21, heading)
+        py = purch_y + box_h - 29
+        c.setFont("Helvetica", 5.2)
+        c.setFillColor(colors.black)
+        for prow in rowset:
+            c.drawString(ox + x_off, py,
+                         "- " + _fit(c, _row_text(prow), 188.0, "Helvetica", 5.2))
+            py -= lead
 
 def generate_shop_drawings(params: ProjectParameters, assembly: Dict[str, Any], stock_data: Dict[str, Any], output_path: str):
     """Generates the complete 9-Sheet Vector Shop Drawing Set for US Letter Landscape."""

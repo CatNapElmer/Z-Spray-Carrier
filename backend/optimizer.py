@@ -262,6 +262,19 @@ def optimize_stock(
          "Grade 70", 1, "set", 12.0,
          "Front restraint for the machine"),
     ]
+    for name, grd, qty, unit, wt, note in hardware_items:
+        purchase_rows.append({
+            "category": "HARDWARE",
+            "section": name,
+            "grade": grd,
+            "stick_length": 0.0,
+            "quantity": qty,
+            "unit_size": unit,
+            "total_purchased_length": 0.0,
+            "total_purchased_weight": wt,
+            "notes": note
+        })
+
     total_purchased_wt = sum(r["total_purchased_weight"] for r in purchase_rows)
     total_cut_wt = total_linear_cut_wt
     overall_eff = (total_linear_cut_wt / total_linear_purchased_wt * 100.0) if total_linear_purchased_wt > 0 else 0.0
