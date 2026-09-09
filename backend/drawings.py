@@ -1177,56 +1177,57 @@ def draw_sheet_s8(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     c.drawString(ox + 250, oy,
                  "CUT TO FIT = do not cut to the length shown; fit it on the job.")
 
-    cols = [("MARK", 40), ("DESCRIPTION", 128), ("ASSY", 56),
-            ("SECTION / SIZE", 92), ("GRADE", 70), ("CUT LEN", 48),
-            ("QTY", 24), ("WT", 34), ("NOTES", 168)]
+    # Keep only the information a fabricator needs at the saw and bench.
+    # Assembly, grade, and weight remain available in the CSV package.
+    # Two narrow schedule columns keep every piece on one Letter sheet without
+    # forcing the saw-side text down to unreadable type.
+    cols = [("MARK", 34), ("SHOP ITEM", 96), ("MATERIAL", 79),
+            ("CUT", 40), ("QTY", 22), ("NOTE", 69)]
     table_w = sum(w for _n, w in cols) + 8
+    column_x = (38.0, 410.0)
+    rows_per_column = math.ceil(len(bom) / 2)
+    row_h = 10.5
 
-    y = oy - 16
-    c.setFillColor(colors.HexColor("#003566"))
-    c.rect(ox, y - 4, table_w, 14, fill=1, stroke=0)
-    cur_x = ox + 4
-    c.setFont("Helvetica-Bold", 6.0)
-    c.setFillColor(colors.white)
-    for name, w in cols:
-        c.drawString(cur_x, y, name)
-        cur_x += w
-
-    y -= 11
-    row_h = 8.4
-    for i, row in enumerate(bom):
-        bg = colors.HexColor("#F1F3F5") if i % 2 == 0 else colors.white
-        c.setFillColor(bg)
-        c.rect(ox, y - 2.4, table_w, row_h, fill=1, stroke=0)
-
-        field_fit = bool(row.get("field_fit"))
-        cur_x = ox + 4
-        c.setFillColor(colors.HexColor("#B7094C") if field_fit else colors.black)
-        c.setFont("Helvetica-Bold", 5.8)
-        c.drawString(cur_x, y, row.get("piece_mark", ""))
-        cur_x += cols[0][1]
-
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica", 5.8)
-        for value, (_n, w) in zip(
-                [row.get("description", ""),
-                 row.get("assembly", ""),
-                 row.get("size", ""),
-                 row.get("grade", ""),
-                 fraction_str(row.get("cut_length", 0.0)),
-                 str(row.get("quantity", 1)),
-                 f"{float(row.get('total_weight', 0.0)):.1f}"],
-                cols[1:8]):
-            c.drawString(cur_x, y, _fit(c, value, w - 4, "Helvetica", 5.8))
+    def draw_schedule_column(x: float, rows: List[Dict[str, Any]], shade_offset: int):
+        y = oy - 16
+        c.setFillColor(colors.HexColor("#003566"))
+        c.rect(x, y - 4, table_w, 14, fill=1, stroke=0)
+        cur_x = x + 4
+        c.setFont("Helvetica-Bold", 6.4)
+        c.setFillColor(colors.white)
+        for name, w in cols:
+            c.drawString(cur_x, y, name)
             cur_x += w
 
-        note = row.get("notes", "")
-        if field_fit:
-            note = "CUT TO FIT - " + note.split("CUT TO FIT - ", 1)[-1]
-            c.setFillColor(colors.HexColor("#B7094C"))
-            c.setFont("Helvetica-Bold", 5.8)
-        c.drawString(cur_x, y, _fit(c, note, cols[8][1] - 4, "Helvetica", 5.8))
-        y -= row_h
+        y -= 11
+        for i, row in enumerate(rows):
+            c.setFillColor(colors.HexColor("#F1F3F5") if (i + shade_offset) % 2 == 0 else colors.white)
+            c.rect(x, y - 2.4, table_w, row_h, fill=1, stroke=0)
+            field_fit = bool(row.get("field_fit"))
+            cur_x = x + 4
+            c.setFillColor(colors.HexColor("#B7094C") if field_fit else colors.black)
+            c.setFont("Helvetica-Bold", 6.3)
+            c.drawString(cur_x, y, row.get("piece_mark", ""))
+            cur_x += cols[0][1]
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 6.3)
+            for value, (_name, width) in zip(
+                    [row.get("description", "").split(" - ", 1)[0],
+                     row.get("size", ""),
+                     fraction_str(row.get("cut_length", 0.0)),
+                     str(row.get("quantity", 1))], cols[1:5]):
+                c.drawString(cur_x, y, _fit(c, value, width - 4, "Helvetica", 6.3))
+                cur_x += width
+            note = row.get("notes", "")
+            if field_fit:
+                note = "CUT TO FIT"
+                c.setFillColor(colors.HexColor("#B7094C"))
+                c.setFont("Helvetica-Bold", 6.3)
+            c.drawString(cur_x, y, _fit(c, note, cols[5][1] - 4, "Helvetica", 6.3))
+            y -= row_h
+
+    draw_schedule_column(column_x[0], bom[:rows_per_column], 0)
+    draw_schedule_column(column_x[1], bom[rows_per_column:], rows_per_column)
 
     # Summary box, clear of both the table and the title block.
     box_h = 54.0
@@ -1267,15 +1268,16 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
     
     c.setFont("Helvetica-Bold", 9.5)
     c.setFillColor(colors.HexColor("#001D3D"))
-    c.drawString(ox, oy, "STOCK CUTTING PLAN - 1D LINEAR NESTING DIAGRAMS")
+    c.drawString(ox, oy, "STOCK CUTTING PLAN - CUT EACH STICK IN THIS ORDER")
     
     stock_plan = stock_data.get("stock_plan", [])
-    y = oy - 22
-    bar_w = 440.0
+    column_x = (ox, 366.0)
+    y_by_column = [oy - 22, oy - 22]
     
     for i, stick in enumerate(stock_plan):
-        if y < 190:
-            break
+        column = i % 2
+        x = column_x[column]
+        y = y_by_column[column]
             
         stk_id = stick.get("stick_id", f"STK-{i+1:02d}")
         sec = stick.get("section", "")
@@ -1285,36 +1287,25 @@ def draw_sheet_s9(dc: DraftingCanvas, params: ProjectParameters, assembly: Dict[
         eff = stick.get("efficiency_pct", 0.0)
         scrap = stick.get("scrap_remaining", 0.0)
         
-        c.setFont("Helvetica-Bold", 6.5)
+        c.setFont("Helvetica-Bold", 7.2)
         c.setFillColor(colors.HexColor("#0D1B2A"))
-        c.drawString(ox, y, f"{stk_id}: {sec} ({grd}) - {fraction_str(stk_len)} ({stk_len/12:.0f}-ft Stock) | Yield: {eff:.1f}% | Remnant Scrap: {fraction_str(scrap)}")
-        
-        y -= 15
-        # Full stock bar
-        c.setFillColor(colors.HexColor("#E9ECEF"))
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(1.0)
-        c.rect(ox, y, bar_w, 13, fill=1, stroke=1)
-        
-        # Nested parts inside bar
-        cur_px = ox
-        for p in parts:
-            p_len = p.get("length", 0.0)
-            part_bar_w = (p_len / stk_len) * bar_w
-            c.setFillColor(colors.HexColor("#A2D2FF"))
-            c.setStrokeColor(colors.HexColor("#0077B6"))
-            c.rect(cur_px, y, part_bar_w, 13, fill=1, stroke=1)
-            
-            # Smart text formatting: only print what fits
-            c.setFillColor(colors.HexColor("#03045E"))
-            c.setFont("Helvetica-Bold", 5.0)
-            if part_bar_w >= 36:
-                c.drawCentredString(cur_px + part_bar_w/2, y + 4, f"{p.get('piece_mark', '')} ({fraction_str(p_len)})")
-            elif part_bar_w >= 18:
-                c.drawCentredString(cur_px + part_bar_w/2, y + 4, p.get('piece_mark', ''))
-            cur_px += part_bar_w
-            
-        y -= 22
+        c.drawString(x, y, f"{stk_id} - {sec} - {stk_len/12:.0f} FT STICK")
+        y -= 10
+        c.setFont("Helvetica-Bold", 6.2)
+        c.setFillColor(colors.HexColor("#003566"))
+        c.drawString(x, y, "CUT:")
+        y -= 8
+        c.setFont("Helvetica", 6.5)
+        c.setFillColor(colors.black)
+        for cut_number, part in enumerate(parts, start=1):
+            c.drawString(x + 9, y,
+                         f"{cut_number}. {part.get('piece_mark', '')} - "
+                         f"{fraction_str(part.get('length', 0.0))}")
+            y -= 8
+        c.setFont("Helvetica-Bold", 6.5)
+        c.setFillColor(colors.HexColor("#B7094C"))
+        c.drawString(x, y, f"LEFT OVER: {fraction_str(scrap)}")
+        y_by_column[column] = y - 16
         
     # ---- What to buy. Put the whole list on the sheet, in one column each,
     #      sized to what is actually there instead of a fixed five rows. ----

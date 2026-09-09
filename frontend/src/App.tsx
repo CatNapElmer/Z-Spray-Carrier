@@ -11,6 +11,16 @@ interface ParameterProvenance {
   required_before_fabrication: boolean
 }
 
+function formatShopFraction(value: number): string {
+  const sixteenths = Math.round(value * 16)
+  const whole = Math.floor(sixteenths / 16)
+  const remainder = sixteenths % 16
+  if (remainder === 0) return `${whole}"`
+  const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b)
+  const divisor = gcd(remainder, 16)
+  return `${whole ? `${whole} ` : ''}${remainder / divisor}/${16 / divisor}"`
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<string>('PROJECT')
   const [params, setParams] = useState({
@@ -67,6 +77,7 @@ function App() {
   const [provenance, setProvenance] = useState<Record<string, ParameterProvenance>>({})
   const [stockPlan, setStockPlan] = useState<any>(null)
   const [isExporting, setIsExporting] = useState<boolean>(false)
+  const [selectedDrawingSheet, setSelectedDrawingSheet] = useState<number>(1)
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [assemblyFilter, setAssemblyFilter] = useState<string>('ALL')
 
@@ -872,22 +883,13 @@ function App() {
                 {(stockPlan?.stock_plan || []).map((stick: any, i: number) => (
                   <div key={i} className="stick-card">
                     <div className="stick-header">
-                      <strong>{stick.stick_id}: {stick.section}</strong> ({stick.stock_length / 12} ft stick - {stick.stock_length}")
-                      <span className="stick-stat">Used: {stick.efficiency_pct}% | Left over: {stick.scrap_remaining}"</span>
+                      <strong>{stick.stick_id} — {stick.section} — {stick.stock_length / 12} ft stick</strong>
                     </div>
-                    <div className="stick-bar-visual">
-                      {stick.parts.map((p: any, pi: number) => (
-                        <div
-                          key={pi}
-                          className="stick-part"
-                          style={{ width: `${(p.length / stick.stock_length) * 100}%` }}
-                          title={`${p.piece_mark}: ${p.length}"`}
-                        >
-                          {p.piece_mark} ({p.length}")
-                        </div>
-                      ))}
-                    </div>
-                    <p className="stock-piece-list">{stick.parts.map((p: any) => `${p.piece_mark}: ${p.length}"`).join(' · ')}</p>
+                    <div className="stock-cut-label">CUT:</div>
+                    <ol className="stock-cut-list">
+                      {stick.parts.map((p: any, pi: number) => <li key={pi}><strong>{p.piece_mark}</strong> — {formatShopFraction(p.length)}</li>)}
+                    </ol>
+                    <p className="stock-leftover">LEFT OVER: {formatShopFraction(stick.scrap_remaining)}</p>
                   </div>
                 ))}
               </div>
@@ -913,14 +915,18 @@ function App() {
                   { num: 'S8', title: 'BILL OF MATERIALS & SCHEDULE', desc: 'Full tabular piece schedule with cut sizes, grades, weights' },
                   { num: 'S9', title: 'STOCK CUTTING PLAN', desc: '1D linear nesting diagrams for raw steel ordering' }
                 ].map(s => (
-                  <div key={s.num} className="sheet-row">
+                  <button key={s.num} className={`sheet-row${selectedDrawingSheet === Number(s.num.slice(1)) ? ' selected' : ''}`} onClick={() => setSelectedDrawingSheet(Number(s.num.slice(1)))}>
                     <span className="sheet-num-badge">{s.num}</span>
                     <div className="sheet-info">
                       <h4>{s.title}</h4>
                       <p>{s.desc}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
+              </div>
+              <div className="drawing-preview">
+                <div className="drawing-preview-heading">Previewing S{selectedDrawingSheet} — latest generated shop pack</div>
+                <img src={`http://localhost:8000/api/drawings/preview/${selectedDrawingSheet}`} alt={`Shop drawing S${selectedDrawingSheet}`} />
               </div>
 
               <div className="drawings-action-row">

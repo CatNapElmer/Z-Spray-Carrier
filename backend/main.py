@@ -1,8 +1,10 @@
 import os
 import csv
 import zipfile
+import shutil
+import subprocess
 from typing import Dict, Any
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from reportlab.pdfgen import canvas
@@ -28,6 +30,35 @@ app.add_middleware(
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "app": "Z Spray Carrier Fabricator", "version": "2.0.0"}
+
+@app.get("/api/drawings/preview/{sheet_number}")
+def drawing_preview(sheet_number: int):
+    """Return one rendered page from the latest generated fabrication package."""
+    if sheet_number not in range(1, 10):
+        raise HTTPException(status_code=404, detail="Shop drawing sheet must be S1 through S9.")
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    image_path = os.path.join(project_root, "output", "sheet_renders", f"sheet_{sheet_number}.png")
+    if not os.path.isfile(image_path):
+        raise HTTPException(status_code=404, detail="Generate the fabrication package to create drawing previews.")
+    return FileResponse(image_path, media_type="image/png")
+
+def refresh_sheet_renders(pdf_path: str, project_root: str) -> None:
+    """Refresh the nine PNG previews from the just-generated shop drawing PDF."""
+    renderer = shutil.which("pdftoppm")
+    if not renderer:
+        return
+    render_dir = os.path.join(project_root, "output", "sheet_renders")
+    os.makedirs(render_dir, exist_ok=True)
+    prefix = os.path.join(render_dir, "_latest_sheet")
+    subprocess.run(
+        [renderer, "-png", "-r", "144", "-f", "1", "-l", "9", pdf_path, prefix],
+        check=True,
+        capture_output=True,
+    )
+    for sheet_number in range(1, 10):
+        rendered_path = f"{prefix}-{sheet_number}.png"
+        if os.path.isfile(rendered_path):
+            os.replace(rendered_path, os.path.join(render_dir, f"sheet_{sheet_number}.png"))
 
 @app.get("/api/project/seed")
 def get_seed_project():
@@ -81,6 +112,7 @@ def export_package(params: ProjectParameters):
     # 1. Full Multi-Sheet Shop Drawings (S1 through S9)
     pdf_path = os.path.join(output_dir, "Z-Spray-Carrier-Shop-Drawings.pdf")
     generate_shop_drawings(params, assembly, stock_data, pdf_path)
+    refresh_sheet_renders(pdf_path, project_root)
     
     # 2. Standalone Stock Cutting Plan PDF
     stock_pdf_path = os.path.join(output_dir, "Stock-Cutting-Plan.pdf")

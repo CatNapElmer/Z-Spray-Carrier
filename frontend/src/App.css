@@ -525,6 +525,27 @@ body {
   background-color: #FFFFFF;
 }
 
+.stock-cut-label {
+  color: var(--navy-mid);
+  font-size: 13px;
+  font-weight: 900;
+  margin-top: 8px;
+}
+
+.stock-cut-list {
+  margin: 6px 0 8px 26px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.stock-leftover {
+  margin: 0;
+  color: #9D0208;
+  font-size: 15px;
+  font-weight: 900;
+}
+
 .stick-header {
   font-size: 11px;
   display: flex;
@@ -574,6 +595,38 @@ body {
   background-color: #F8F9FA;
   border: 1px solid #E9ECEF;
   border-radius: 4px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet-row:hover, .sheet-row.selected {
+  border-color: var(--navy-mid);
+  background-color: #E8F1FA;
+}
+
+.drawing-preview {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  background: #F1F3F5;
+}
+
+.drawing-preview-heading {
+  margin-bottom: 12px;
+  color: var(--navy-mid);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.drawing-preview img {
+  display: block;
+  width: 100%;
+  max-width: 1200px;
+  height: auto;
+  margin: auto;
+  border: 1px solid #ADB5BD;
+  background: white;
 }
 
 .sheet-num-badge {
