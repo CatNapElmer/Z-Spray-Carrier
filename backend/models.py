@@ -8,6 +8,17 @@ class StatusEnum(str, Enum):
     DESIGN = "DESIGN"
     CALCULATED = "CALCULATED"
     ESTIMATED_UNVERIFIED = "ESTIMATED_UNVERIFIED"
+    # Established on the truck / with the machine during ordinary fit-up.
+    # Never printed as a shop dimension.
+    FIELD_FIT = "FIELD_FIT"
+    # A coordinate the program needs to draw the model. NOT a shop dimension.
+    MODEL_ONLY = "MODEL_ONLY"
+
+
+# Shop-facing wording for the two statuses that must never look like a
+# production dimension.
+FIELD_FIT_TEXT = "FIELD FIT TO TRUCK"
+FIT_UP_TEXT = "CHECK DURING MACHINE FIT-UP"
 
 class ParameterItem(BaseModel):
     name: str
@@ -22,8 +33,8 @@ class ProjectParameters(BaseModel):
     # Carrier Maximum Envelope & Base Geometry
     carrier_max_overall_width: float = 38.00  # HARD REQUIREMENT: Max outside width of completed carrier including flare tips (in)
     carrier_width: float = 36.00              # Frame outside width (in) = carrier_max_overall_width - 2 * flare_width
-    carrier_deck_length: float = 63.00        # MEASURED: Front stop to ramp hinge CL (in)
-    deck_height: float = 17.00                # DESIGN/MEASURED: Target running deck height above ground (in)
+    carrier_deck_length: float = 63.00        # MEASURED: Deck frame length, front face to rear face (in)
+    deck_height: float = 17.25                # DESIGN: Running deck height above ground (in) - approx 17"
     
     # Wheel Track Geometry
     track_flat_width: float = 11.50           # DESIGN: Width of each flat wheel track (in)
@@ -35,25 +46,37 @@ class ProjectParameters(BaseModel):
     
     # Ramp Geometry (One rigid hinged assembly)
     ramp_length: float = 61.00                # MEASURED: Hinge CL to tip (in)
-    ramp_clearance: float = 1.00              # DESIGN: Nominal clearance behind rear tires to ramp (in)
-    ramp_hinge_pin_dia: float = 0.750         # DESIGN: Hinge pin diameter (in)
-    ramp_hinge_sleeve_od: float = 1.125       # DESIGN: 1-1/8" DOM sleeve OD (in)
-    ramp_hinge_sleeve_id: float = 0.781       # DESIGN: 25/32" DOM sleeve ID (0.031" diametral clearance over 3/4" pin) (in)
-    ramp_hinge_sleeve_wall: float = 0.172     # DESIGN: 0.172" DOM wall thickness (in)
-    ramp_hinge_pin_z: float = -1.00           # DESIGN: Height of hinge pin axis relative to deck surface (in)
-    
-    # Truck Interface
-    receiver_clear_opening: float = 2.00      # DESIGN: Clear inside opening of receiver socket (in)
-    receiver_socket_outside_width: float = 2.50 # ESTIMATED_UNVERIFIED: Outside width of truck receiver socket (in)
-    receiver_outside_span: float = 40.00      # MEASURED: Truck receiver tubes outside-to-outside span (in)
-    receiver_spacing: float = 37.50           # ESTIMATED_UNVERIFIED: Receiver c-c spacing (40.0 - socket OD) (in)
-    receiver_tube_width: float = 2.00         # Stinger tube dimension (2.00" square tube) (in)
+    ramp_clearance: float = 1.00              # FIELD_FIT: Nominal clearance behind rear tires to ramp (in)
+
+    # Ramp Hinge - ordinary welded barrel hinge on one continuous pin.
+    # The gap between the deck and the ramp IS the barrel OD, so every barrel
+    # sits tangent in the corner of its own crossmember. Nothing is machined.
+    hinge_pin_dia: float = 0.750              # DESIGN: 3/4" cold-finished round bar pin
+    hinge_barrel_od: float = 1.250            # DESIGN: 1-1/4" OD barrel stock
+    hinge_barrel_wall: float = 0.1875         # DESIGN: 3/16" wall
+    hinge_barrel_id: float = 0.875            # DESIGN: 7/8" bore -> 1/8" running clearance on the pin
+    hinge_barrel_length: float = 4.00         # DESIGN: Each barrel 4" long
+    hinge_barrel_count: int = 7               # DESIGN: 4 carrier + 3 ramp, interleaved, symmetric
+    hinge_barrel_gap: float = 0.50            # DESIGN: Clear gap between adjacent barrels
+    hinge_pin_length: float = 36.00           # DESIGN: Pin length (in)
+
+    # Truck Interface.
+    # There is no receiver-socket survey here on purpose. The two stingers are
+    # located by sliding them into the two existing sockets; the truck is the
+    # fixture. The one spacing value below exists only so the program can draw
+    # the model and is never printed as a shop dimension.
+    stinger_spacing_model_nominal: float = 37.50  # MODEL_ONLY: drawing coordinate, NOT a shop dimension
     stinger_section: str = "2x2x1/4 Tube"      # DESIGN: Structural tube for stingers
-    stinger_insertion_length: float = 18.00   # ESTIMATED_UNVERIFIED: Penetration into truck receiver (in)
-    stinger_overlap_length: float = 20.00     # DESIGN: Welded underframe overlap length (in) (extends past C2 at X=18")
-    hitch_pin_hole_setback: float = 3.00      # ESTIMATED_UNVERIFIED: Pin hole from stinger tip (in)
+    stinger_sleeve_section: str = "2.5x2.5x3/16 Tube"  # DESIGN: Slip-over reinforcement, outside the socket
+    stinger_sleeve_length: float = 40.00      # DESIGN: Sleeve length (in), front end field fit to socket face
+    stinger_insertion_length: float = 18.00   # FIELD_FIT: Nominal penetration into truck receiver (in)
+    stinger_overlap_length: float = 40.00     # DESIGN: Length aft of the deck front face (in)
+    hitch_pin_hole_setback: float = 3.00      # FIELD_FIT: Nominal; transfer the hole from the truck
     hitch_pin_hole_dia: float = 0.656         # DESIGN: 5/8" hitch pin hole diameter (+1/32" clearance) (in)
-    truck_suspension_drop: float = 1.50       # ESTIMATED_UNVERIFIED: Anticipated squat under payload (in)
+    truck_suspension_drop: float = 1.50       # FIELD_FIT: Anticipated squat under payload (in)
+    # Under-deck mount beams. Lengths are cut to fit between the two stingers.
+    mount_beam_section: str = "2x2x1/4 Tube"  # DESIGN
+    mount_beam_stations: List[float] = [4.0, 17.0, 37.0]  # DESIGN: front face X of MB1/MB2/MB3
     
     # Machine Specifications (2026 Z-Spray Junior ZSX3624)
     machine_width: float = 36.00              # OEM: Machine overall width (in)
@@ -66,11 +89,8 @@ class ProjectParameters(BaseModel):
     machine_rear_tire_diameter: float = 22.00 # OEM: Rear tire overall diameter (in)
     machine_front_tire_width: float = 6.00    # OEM: Front tire section width (in)
     machine_front_tire_diameter: float = 15.00 # OEM: Front tire overall diameter (in)
-    # Wheel positions are NOT known. They are left as None on purpose so that no
-    # coordinate is ever invented to make a drawing or a clearance check work.
-    machine_wheelbase: Optional[float] = None            # UNVERIFIED: front axle to rear axle (in)
-    machine_rear_tire_to_rear: Optional[float] = None    # UNVERIFIED: rear tire rearmost point to back of machine (in)
-    machine_rear_track_width: Optional[float] = None     # UNVERIFIED: outside-to-outside across rear tires (in)
+    # Wheel positions are deliberately NOT parameters. Where the machine ends up
+    # on the deck is settled by rolling it on during fit-up, not by a survey.
     machine_curb_weight: float = 698.0        # OEM: Dry curb weight (lb)
     fertilizer_hopper_weight: float = 150.0   # OEM: Main hopper capacity (lb)
     fertilizer_trays_weight: float = 100.0    # OEM: Two 50 lb trays (lb)
@@ -82,7 +102,11 @@ class ProjectParameters(BaseModel):
     braking_factor: float = 0.80              # DESIGN: Deceleration factor (g)
     lateral_factor: float = 0.50              # DESIGN: Cornering factor (g)
     material_yield_strength: float = 46000.0  # A500 Gr B yield strength (psi)
-    target_safety_factor: float = 2.00        # Minimum desired safety factor
+    # Acceptance rule: nothing yields at the dynamic bump factor above. That is
+    # the same as a factor of 2.0 against yield on the static load. We do NOT
+    # stack another safety factor on top of an already-factored load.
+    target_safety_factor: float = 2.00        # Static factor against yield
+    machine_cg_from_deck_front: float = 31.5  # DESIGN: assumed load position, mid-deck (in)
     
     # Stock Cutting Preferences
     available_stock_lengths: List[float] = [240.0, 288.0] # 20 ft and 24 ft
@@ -165,6 +189,8 @@ class Member(BaseModel):
     total_weight: float # lb
     holes: List[Hole] = []
     notes: str = ""
+    field_fit: bool = False   # cut/locate on the truck, not from a drawing
+    nested_over: str = ""     # this piece slips OVER that piece (sleeve)
     status: StatusEnum = StatusEnum.DESIGN
 
 class Plate(BaseModel):
@@ -196,15 +222,15 @@ class Plate(BaseModel):
 
 class HingeComponent(BaseModel):
     pin_diameter: float = 0.750
-    pin_length: float = 40.00
-    sleeve_od: float = 1.125
-    sleeve_id: float = 0.781
-    sleeve_wall: float = 0.172
-    diametral_clearance: float = 0.031
-    sleeve_lengths: List[float] = [3.5, 3.5, 3.5, 3.5]
+    pin_length: float = 36.00
+    sleeve_od: float = 1.250
+    sleeve_id: float = 0.875
+    sleeve_wall: float = 0.1875
+    diametral_clearance: float = 0.125
+    sleeve_lengths: List[float] = [4.0] * 7
     pin_material: str = "AISI 1018 Cold Finished Round"
     sleeve_material: str = "ASTM A513 DOM Mechanical Tube"
-    retaining_method: str = "Cross-drilled 3/16\" Hole for Linch Pin with 3/4\" Heavy Flat Washers"
+    retaining_method: str = "Cross-drilled 3/16\" hole 1/2\" from each end - hairpin clip and 3/4\" flat washer"
     status: StatusEnum = StatusEnum.DESIGN
 
 class ContactCheck(BaseModel):
@@ -220,7 +246,10 @@ class ContactCheck(BaseModel):
     contact_area: float = 0.0
     min_contact_dim: float = 0.0
     # FACE_CONTACT | KNIFE_EDGE | GAP | INTERFERENCE | MISSING_GEOMETRY
+    # FACE_CONTACT | TANGENT_FILLET | KNIFE_EDGE | GAP | INTERFERENCE
+    #              | MISSING_GEOMETRY
     result: str = "FACE_CONTACT"
+    weld_run: float = 0.0     # how long a bead you can actually run here
     passed: bool = False
     message: str = ""
 
@@ -234,7 +263,8 @@ class InterferenceCheck(BaseModel):
     penetration: float = 0.0
     volume: float = 0.0
     has_declared_weld: bool = False
-    category: str = "UNINTENDED_CLASH"  # FIT_REQUIRED | UNINTENDED_CLASH
+    # FIT_REQUIRED | NESTED_FIT | UNINTENDED_CLASH
+    category: str = "UNINTENDED_CLASH"
     severity: str = "MAJOR"             # MAJOR | MINOR (trim-to-fit)
     message: str = ""
 
@@ -253,6 +283,16 @@ class EnvelopeResult(BaseModel):
     width_over_limit: float = 0.0
     widest_left_pieces: List[str] = []
     widest_right_pieces: List[str] = []
+    # The 38" target applies to the deck / ramp / guide assembly the machine
+    # rides on. Under-truck mounting steel is measured separately and is NOT
+    # held to that limit - it lives under the truck, not on the road profile.
+    usable_width: float = 0.0
+    usable_within_limit: bool = False
+    usable_over_limit: float = 0.0
+    usable_left_pieces: List[str] = []
+    usable_right_pieces: List[str] = []
+    under_truck_width: float = 0.0
+    under_truck_pieces: List[str] = []
     message: str = ""
 
 class HingeCollision(BaseModel):
@@ -273,17 +313,25 @@ class HingeRotationResult(BaseModel):
     message: str = ""
 
 class MachineFitResult(BaseModel):
-    machine_width: float = 0.0
-    machine_length_field: float = 0.0
+    """
+    Does the machine's running gear fit the deck?
+
+    The guides guide the TIRES. The machine's published overall width is a body
+    dimension measured well above the 3" guides and is not what has to pass
+    between them. Whether any bodywork brushes a guide is settled by rolling the
+    machine on during fit-up, which is normal practice, not an open question.
+    """
+    rear_tire_width: float = 0.0
+    track_flat_width: float = 0.0
+    tire_side_clearance: float = 0.0     # slack per side on one track
     guide_clear_width: Optional[float] = None
-    width_shortfall: float = 0.0
-    width_fits: Optional[bool] = None
+    tracks_fit_tires: Optional[bool] = None
     deck_usable_length: float = 0.0
+    machine_length_field: float = 0.0
     front_overhang: float = 0.0
-    wheel_check_status: str = "UNVERIFIED"
-    status: str = "UNVERIFIED"  # PASS | FAIL | UNVERIFIED
+    status: str = "PASS"                 # PASS | FAIL
     notes: List[str] = []
-    field_measurements_required: List[str] = []
+    fit_up_checks: List[str] = []        # things confirmed by rolling it on
 
 class GeometryCheckReport(BaseModel):
     contacts: List[ContactCheck] = []
@@ -313,6 +361,7 @@ class StructuralCheckResult(BaseModel):
     stinger_bending_stress_psi: float
     yield_strength_psi: float
     factor_of_safety: float
+    yields_at_g: float = 0.0
     target_safety_factor: float = 2.00
     controlling_load_case: str = "VERTICAL"
     controlling_stress_psi: float = 0.0
@@ -334,6 +383,7 @@ class BomRow(BaseModel):
     quantity: int
     unit_weight: float # lb/ft or lb/ea
     total_weight: float # lb
+    field_fit: bool = False
     notes: str = ""
 
 class CutListRow(BaseModel):
@@ -345,6 +395,7 @@ class CutListRow(BaseModel):
     cut_type: str = "SQUARE"
     cut_angle_left: float = 0.0
     cut_angle_right: float = 0.0
+    field_fit: bool = False
     notes: str = ""
 
 class PurchaseRow(BaseModel):

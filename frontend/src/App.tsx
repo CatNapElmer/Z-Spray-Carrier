@@ -17,7 +17,7 @@ function App() {
     carrier_max_overall_width: 38.0,
     carrier_width: 36.0,
     carrier_deck_length: 63.0,
-    deck_height: 17.0,
+    deck_height: 17.25,
     track_flat_width: 11.5,
     track_outer_spacing: 36.0,
     track_center_gap: 13.0,
@@ -26,17 +26,22 @@ function App() {
     flare_width: 1.0,
     ramp_length: 61.0,
     ramp_clearance: 1.0,
-    ramp_hinge_pin_dia: 0.75,
-    ramp_hinge_sleeve_od: 1.125,
-    ramp_hinge_sleeve_id: 0.781,
-    ramp_hinge_sleeve_wall: 0.172,
-    receiver_spacing: 37.5,
-    receiver_outside_span: 40.0,
-    receiver_socket_outside_width: 2.5,
-    receiver_tube_width: 2.0,
+    hinge_pin_dia: 0.75,
+    hinge_barrel_od: 1.25,
+    hinge_barrel_wall: 0.1875,
+    hinge_barrel_id: 0.875,
+    hinge_barrel_length: 4.0,
+    hinge_barrel_count: 7,
+    hinge_barrel_gap: 0.5,
+    hinge_pin_length: 36.0,
+    stinger_spacing_model_nominal: 37.5,
     stinger_section: '2x2x1/4 Tube',
+    stinger_sleeve_section: '2.5x2.5x3/16 Tube',
+    stinger_sleeve_length: 40.0,
     stinger_insertion_length: 18.0,
-    stinger_overlap_length: 20.0,
+    stinger_overlap_length: 40.0,
+    mount_beam_section: '2x2x1/4 Tube',
+    mount_beam_stations: [4.0, 17.0, 37.0],
     hitch_pin_hole_setback: 3.0,
     hitch_pin_hole_dia: 0.656,
     truck_suspension_drop: 1.5,
@@ -214,8 +219,8 @@ function App() {
           <span className="val">{params.carrier_deck_length}" {renderBadge('MEASURED')}</span>
         </div>
         <div className="metric-chip">
-          <span className="label">RECEIVERS:</span>
-          <span className="val">{params.receiver_spacing}" C-C {renderBadge('ESTIMATED_UNVERIFIED')}</span>
+          <span className="label">TRUCK MOUNT:</span>
+          <span className="val">FIELD FIT TO TRUCK {renderBadge('FIELD_FIT')}</span>
         </div>
         <div className="metric-chip">
           <span className="label">EST. STEEL DEADWEIGHT:</span>
@@ -225,9 +230,9 @@ function App() {
           <span className="label">STRUCTURAL STATUS:</span>
           <span className="val">
             {assembly?.structural?.status === 'PASS' ? (
-              <span className="status-badge badge-pass">PASS (FOS {assembly.structural.factor_of_safety})</span>
+              <span className="status-badge badge-pass">PASS (holds to {assembly.structural.yields_at_g}g)</span>
             ) : (
-              <span className="status-badge badge-fail">FAIL (FOS {assembly?.structural?.factor_of_safety || '0.69'})</span>
+              <span className="status-badge badge-fail">FAIL (yields at {assembly?.structural?.yields_at_g ?? '--'}g)</span>
             )}
           </span>
         </div>
@@ -423,8 +428,8 @@ function App() {
                   <label>Hinge Pin Diameter (in)</label>
                   <input
                     type="number"
-                    value={params.ramp_hinge_pin_dia}
-                    onChange={e => handleParamChange('ramp_hinge_pin_dia', parseFloat(e.target.value) || 0)}
+                    value={params.hinge_pin_dia}
+                    onChange={e => handleParamChange('hinge_pin_dia', parseFloat(e.target.value) || 0)}
                   />
                   <span className="hint">3/4" (0.750") AISI 1018 Cold Finished Round Bar</span>
                 </div>
@@ -453,37 +458,16 @@ function App() {
           {/* TAB 5: TRUCK MOUNTS */}
           {activeTab === 'TRUCK' && (
             <div className="panel-box">
-              <h2>Truck Twin Receiver & Stinger Mounts</h2>
+              <h2>Truck Mount - Field Fit</h2>
+              <p className="warn-text">
+                The truck is the fixture. Slide both mounting tubes into the two
+                existing sockets and the spacing sets itself. There is no
+                receiver measurement to take and no centreline to calculate.
+                Pin holes are transferred from the truck.
+              </p>
               <div className="form-grid">
                 <div className="input-field">
-                  <label>Receiver Outside Span (in) {renderBadge('MEASURED')}</label>
-                  <input
-                    type="number"
-                    value={params.receiver_outside_span}
-                    onChange={e => handleParamChange('receiver_outside_span', parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="hint">40.00" outside-to-outside of truck receiver tubes</span>
-                </div>
-                <div className="input-field unverified-field">
-                  <label>Receiver Socket Outside Width (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
-                  <input
-                    type="number"
-                    value={params.receiver_socket_outside_width}
-                    onChange={e => handleParamChange('receiver_socket_outside_width', parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="warn-text">FIELD VERIFICATION REQ'D: Assumed 2.50" OD</span>
-                </div>
-                <div className="input-field unverified-field">
-                  <label>Receiver Centerline Spacing (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
-                  <input
-                    type="number"
-                    value={params.receiver_spacing}
-                    onChange={e => handleParamChange('receiver_spacing', parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="warn-text">UNVERIFIED: Computed 40.0" span - 2.50" socket OD = 37.50" c-c</span>
-                </div>
-                <div className="input-field">
-                  <label>Stinger Structural Section</label>
+                  <label>Mounting Tube Section</label>
                   <select
                     value={params.stinger_section}
                     onChange={e => handleParamChange('stinger_section', e.target.value)}
@@ -493,31 +477,31 @@ function App() {
                   </select>
                 </div>
                 <div className="input-field unverified-field">
-                  <label>Stinger Insertion Depth (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
+                  <label>Mounting Tube Insertion Depth (in) {renderBadge('FIELD_FIT')}</label>
                   <input
                     type="number"
                     value={params.stinger_insertion_length}
                     onChange={e => handleParamChange('stinger_insertion_length', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="warn-text">FIELD VERIFICATION REQUIRED: Measure truck receiver depth (18.0" assumed)</span>
+                  <span className="hint">Nominal only - push the tube in until it stops. FIELD FIT TO TRUCK.</span>
                 </div>
                 <div className="input-field unverified-field">
-                  <label>Hitch Pin Hole Setback (in) {renderBadge('ESTIMATED_UNVERIFIED')}</label>
+                  <label>Hitch Pin Hole Setback (in) {renderBadge('FIELD_FIT')}</label>
                   <input
                     type="number"
                     value={params.hitch_pin_hole_setback}
                     onChange={e => handleParamChange('hitch_pin_hole_setback', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="warn-text">FIELD VERIFICATION REQUIRED: Measure 5/8" hole distance on F-350</span>
+                  <span className="hint">Nominal only - TRANSFER PIN HOLES FROM TRUCK.</span>
                 </div>
                 <div className="input-field">
-                  <label>Carrier Underframe Overlap (in) {renderBadge('DESIGN')}</label>
+                  <label>Mounting Tube Run-Back (in) {renderBadge('DESIGN')}</label>
                   <input
                     type="number"
                     value={params.stinger_overlap_length}
                     onChange={e => handleParamChange('stinger_overlap_length', parseFloat(e.target.value) || 0)}
                   />
-                  <span className="hint">20.00" overlap: extends past C2 (X=18.00") by 2.0" to tie in with G1-2 gusset</span>
+                  <span className="hint">How far the mounting tubes run back under the deck, past all three mount beams</span>
                 </div>
               </div>
             </div>
@@ -571,15 +555,15 @@ function App() {
                 <div className="structural-summary">
                   {assembly.structural.status === 'FAIL' ? (
                     <div className="structural-fail-banner">
-                      <h3>STRUCTURAL INTEGRITY WARNING: STATUS FAIL (FOS = {assembly.structural.factor_of_safety} vs {assembly.structural.target_safety_factor} Target)</h3>
+                      <h3>NOT STRONG ENOUGH: yields at about {assembly.structural.yields_at_g}g (needs {assembly.structural.target_safety_factor}g)</h3>
                       <p>
-                        Stinger cantilever bending stress ({Math.round(assembly.structural.stinger_bending_stress_psi).toLocaleString()} psi) exceeds the {Math.round(assembly.structural.yield_strength_psi).toLocaleString()} psi yield strength of 2x2x1/4 HSS tubes under 2.0g dynamic vertical shock.
+                        Mounting tube bending is {Math.round(assembly.structural.stinger_bending_stress_psi).toLocaleString()} psi against {Math.round(assembly.structural.yield_strength_psi).toLocaleString()} psi yield. Fix it on the carrier - the truck does not get modified.
                         DO NOT deploy on public highways without the structural reinforcements listed below.
                       </p>
                     </div>
                   ) : (
                     <div className="alert-box-success" style={{ padding: '12px 16px', marginBottom: '14px' }}>
-                      <strong>STRUCTURAL STATUS: PASS (FOS = {assembly.structural.factor_of_safety})</strong>
+                      <strong>STRONG ENOUGH: nothing yields below about {assembly.structural.yields_at_g}g</strong>
                     </div>
                   )}
 
@@ -617,38 +601,50 @@ function App() {
 
                   {assembly.structural.hinge_check && (
                     <>
-                      <h3>Ramp Hinge Mechanical & Shear Analysis</h3>
+                      <h3>Ramp Hinge Check</h3>
                       <table className="data-table" style={{ marginTop: '8px', marginBottom: '16px' }}>
                         <thead>
                           <tr>
-                            <th>Check Component</th>
-                            <th>Design Dimension / Load</th>
-                            <th>Calculated Stress</th>
-                            <th>Safety Factor / Clearance</th>
+                            <th>What is checked</th>
+                            <th>Design</th>
+                            <th>Stress</th>
                             <th>Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr>
-                            <td><strong>DOM Mechanical Sleeve Clearance</strong></td>
-                            <td>3/4" Pin (0.750") in 25/32" Sleeve (0.781" ID)</td>
-                            <td>--</td>
-                            <td>{assembly.structural.hinge_check.diametral_clearance_in}" (1/32" diametral)</td>
+                            <td><strong>Pin running clearance</strong></td>
+                            <td>
+                              {assembly.structural.hinge_check.pin_diameter_in}" pin in a{' '}
+                              {assembly.structural.hinge_check.barrel_id_in}" bore
+                            </td>
+                            <td>{assembly.structural.hinge_check.diametral_clearance_in}" loose - no reaming</td>
                             <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.clearance_status}</span></td>
                           </tr>
                           <tr>
-                            <td><strong>Hinge Pin Double-Shear (P1)</strong></td>
-                            <td>{Math.round(assembly.structural.hinge_check.dynamic_loading_axle_load_lb).toLocaleString()} lb dynamic surge (4 shear planes)</td>
+                            <td><strong>Hinge pin shear</strong></td>
+                            <td>
+                              {Math.round(assembly.structural.hinge_check.design_load_lb).toLocaleString()} lb over{' '}
+                              {assembly.structural.hinge_check.shear_planes} shear planes
+                            </td>
                             <td>{Math.round(assembly.structural.hinge_check.pin_shear_stress_psi).toLocaleString()} psi</td>
-                            <td>FOS = {assembly.structural.hinge_check.pin_shear_fos}</td>
                             <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.pin_shear_status}</span></td>
                           </tr>
                           <tr>
-                            <td><strong>Hinge Ear Bearing (G3 Plates)</strong></td>
-                            <td>3/8" A36 plate bearing area (0.281 in2 per ear)</td>
-                            <td>{Math.round(assembly.structural.hinge_check.ear_bearing_stress_psi).toLocaleString()} psi</td>
-                            <td>FOS = {assembly.structural.hinge_check.ear_bearing_fos}</td>
-                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.ear_bearing_status}</span></td>
+                            <td><strong>Rear cross tube (C4)</strong></td>
+                            <td>{assembly.structural.hinge_check.barrel_count} barrels of {assembly.structural.hinge_check.barrel_od_in}" OD tube</td>
+                            <td>{Math.round(assembly.structural.hinge_check.cross_tube_stress_psi).toLocaleString()} psi</td>
+                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.cross_tube_status}</span></td>
+                          </tr>
+                          <tr>
+                            <td><strong>Barrel welds</strong></td>
+                            <td>
+                              {Math.round(assembly.structural.hinge_check.weld_demand_lb_per_barrel).toLocaleString()} lb per barrel
+                            </td>
+                            <td>
+                              carries {Math.round(assembly.structural.hinge_check.weld_capacity_lb_per_barrel).toLocaleString()} lb
+                            </td>
+                            <td><span className="status-badge badge-pass">{assembly.structural.hinge_check.weld_status}</span></td>
                           </tr>
                         </tbody>
                       </table>
@@ -657,7 +653,7 @@ function App() {
 
                   {assembly.structural.reinforcement_recommendations && assembly.structural.reinforcement_recommendations.length > 0 && (
                     <div className="recom-box">
-                      <h4>Mandatory Reinforcement Options to Achieve FOS &ge; 2.00:</h4>
+                      <h4>Notes on the mounting tubes:</h4>
                       <ul>
                         {assembly.structural.reinforcement_recommendations.map((rec: string, idx: number) => (
                           <li key={idx}>{rec}</li>

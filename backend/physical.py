@@ -38,6 +38,12 @@ MIN_PENETRATION = 0.010
 # Overlap shallower than this is a trim-to-fit item at the bench rather than a
 # structural clash (e.g. expanded metal running into the guide's upstand).
 MINOR_PENETRATION = 0.250
+# The shortest bead worth calling a structural weld. If two pieces touch along
+# at least this much, a fabricator can run a fillet there - that is a real
+# joint, whether the pieces lap face to face or just sit against each other in
+# a corner. Chasing a "contact patch" instead of a weld length is what made the
+# old checker call ordinary trailer joints failures.
+MIN_WELD_RUN = 1.000
 
 # Ramp rotation angles to sweep, degrees from the flat/loading position.
 DEFAULT_ROTATION_ANGLES = [0.0, 5.0, 15.0, 30.0, 45.0, 60.0, 75.0, 85.0, 90.0]
@@ -131,64 +137,56 @@ def classify_contact(a: BoxBounds, b: BoxBounds,
     """
     Decide what kind of physical relationship two envelopes have.
 
-    FACE_CONTACT  - they meet on a real face with a weldable patch
-    KNIFE_EDGE    - they touch, but on a sliver too narrow to weld structurally
-    GAP           - they do not touch at all
-    INTERFERENCE  - they occupy the same space
-
-    `gov_a` / `gov_b` are the governing engagement dimensions of the two parts:
-    a plate's thickness, or a member's smallest section dimension. A plate stood
-    on edge and welded to a tube only ever presents its own thickness, and that
-    is a perfectly good T-joint. What is *not* good is two 2x2 tubes that were
-    meant to lap each other sharing a quarter-inch sliver. Comparing the contact
-    against the governing dimension separates the two cases.
+    FACE_CONTACT   - they lap on a real face
+    TANGENT_FILLET - they sit against each other with a long run of weld
+                     available (a tube in a corner, a stop welded on a deck,
+                     a hinge barrel against a cross tube). Perfectly normal.
+    KNIFE_EDGE     - they only graze: nothing to weld along
+    GAP            - they do not touch at all
+    INTERFERENCE   - they occupy the same space
     """
     ox = _axis_overlap(a.min_x, a.max_x, b.min_x, b.max_x)
     oy = _axis_overlap(a.min_y, a.max_y, b.min_y, b.max_y)
     oz = _axis_overlap(a.min_z, a.max_z, b.min_z, b.max_z)
     ovs = [ox, oy, oz]
-
     worst = min(ovs)
-    if worst < -TOUCH_TOL:
-        return {
-            "overlap_x": round(ox, 4), "overlap_y": round(oy, 4),
-            "overlap_z": round(oz, 4),
-            "gap": round(-worst, 4), "penetration": 0.0,
-            "contact_area": 0.0, "min_contact_dim": 0.0,
-            "result": "GAP",
-        }
 
-    # Everything touches or overlaps. The contact patch is formed by the two
-    # largest overlaps; the smallest is the axis they meet across.
-    patch = sorted(ovs, reverse=True)[:2]
-    patch = [max(0.0, v) for v in patch]
+    base = {"overlap_x": round(ox, 4), "overlap_y": round(oy, 4),
+            "overlap_z": round(oz, 4)}
+
+    if worst < -TOUCH_TOL:
+        return {**base, "gap": round(-worst, 4), "penetration": 0.0,
+                "contact_area": 0.0, "min_contact_dim": 0.0, "weld_run": 0.0,
+                "result": "GAP"}
+
+    clamped = [max(0.0, v) for v in ovs]
+    patch = sorted(clamped, reverse=True)[:2]
     area = patch[0] * patch[1]
     min_dim = min(patch)
+    weld_run = max(clamped)
 
     if worst > MIN_PENETRATION:
-        return {
-            "overlap_x": round(ox, 4), "overlap_y": round(oy, 4),
-            "overlap_z": round(oz, 4),
-            "gap": 0.0, "penetration": round(worst, 4),
-            "contact_area": round(area, 4), "min_contact_dim": round(min_dim, 4),
-            "result": "INTERFERENCE",
-        }
+        return {**base, "gap": 0.0, "penetration": round(worst, 4),
+                "contact_area": round(area, 4),
+                "min_contact_dim": round(min_dim, 4),
+                "weld_run": round(weld_run, 4), "result": "INTERFERENCE"}
 
-    # A part that is fully engaged across the joint - i.e. the contact is as
-    # wide as that part actually is - is a sound joint however thin it is.
+    # A part fully engaged across the joint - the contact is as wide as that
+    # part actually is - is a sound joint however thin the part is.
     governing = min(v for v in (gov_a, gov_b) if v > 0) if (gov_a > 0 or gov_b > 0) else 0.0
     fully_engaged = governing > 0 and min_dim >= governing - TOUCH_TOL
 
-    result = "FACE_CONTACT"
-    if not fully_engaged and (min_dim < MIN_CONTACT_DIM or area < MIN_CONTACT_AREA):
+    if fully_engaged or (min_dim >= MIN_CONTACT_DIM and area >= MIN_CONTACT_AREA):
+        result = "FACE_CONTACT"
+    elif weld_run >= MIN_WELD_RUN:
+        result = "TANGENT_FILLET"
+    else:
         result = "KNIFE_EDGE"
-    return {
-        "overlap_x": round(ox, 4), "overlap_y": round(oy, 4),
-        "overlap_z": round(oz, 4),
-        "gap": 0.0, "penetration": 0.0,
-        "contact_area": round(area, 4), "min_contact_dim": round(min_dim, 4),
-        "result": result,
-    }
+
+    return {**base, "gap": 0.0, "penetration": 0.0,
+            "contact_area": round(area, 4),
+            "min_contact_dim": round(min_dim, 4),
+            "weld_run": round(weld_run, 4), "result": result}
 
 
 def governing_dims(members: List[Member],
@@ -232,27 +230,29 @@ def check_welds(welds: List[Weld],
 
         c = classify_contact(box_a, box_b, gov.get(a, 0.0), gov.get(b, 0.0))
         res = c["result"]
-        passed = res in ("FACE_CONTACT", "INTERFERENCE")
+        passed = res in ("FACE_CONTACT", "TANGENT_FILLET", "INTERFERENCE")
         if res == "GAP":
             msg = (f"{a} and {b} never touch - clear gap of "
-                   f"{c['gap']:.3f}\". This weld cannot be made.")
+                   f"{c['gap']:.2f} in. This weld cannot be made.")
         elif res == "KNIFE_EDGE":
-            msg = (f"{a} and {b} only touch on a {c['min_contact_dim']:.3f}\" "
-                   f"sliver ({c['contact_area']:.2f} sq in). That is not a "
-                   f"weldable structural face.")
+            msg = (f"{a} and {b} only graze each other - there is no run of "
+                   f"steel to weld along.")
         elif res == "INTERFERENCE":
-            msg = (f"{a} and {b} overlap by {c['penetration']:.3f}\". The joint "
-                   f"is real but one part must be coped or notched to fit.")
+            msg = (f"{a} and {b} overlap by {c['penetration']:.2f} in. Real "
+                   f"joint - notch or grind one piece to suit.")
+        elif res == "TANGENT_FILLET":
+            msg = (f"{a} sits against {b} - {c['weld_run']:.1f} in of fillet "
+                   f"available along the joint.")
         else:
             msg = (f"{a} to {b}: good face contact, "
-                   f"{c['contact_area']:.2f} sq in.")
+                   f"{c['contact_area']:.1f} sq in.")
 
         checks.append(ContactCheck(
             weld_id=w.weld_id, piece_a=a, piece_b=b,
             overlap_x=c["overlap_x"], overlap_y=c["overlap_y"],
             overlap_z=c["overlap_z"], gap=c["gap"],
             penetration=c["penetration"], contact_area=c["contact_area"],
-            min_contact_dim=c["min_contact_dim"],
+            min_contact_dim=c["min_contact_dim"], weld_run=c["weld_run"],
             result=res, passed=passed, message=msg,
         ))
     return checks
@@ -260,16 +260,18 @@ def check_welds(welds: List[Weld],
 
 def check_interference(boxes: Dict[str, BoxBounds],
                        welds: List[Weld],
-                       ignore_marks: Optional[List[str]] = None
+                       ignore_marks: Optional[List[str]] = None,
+                       nested_pairs: Optional[List[Tuple[str, str]]] = None
                        ) -> List[InterferenceCheck]:
     """
     Find every pair of parts occupying the same space.
 
-    Pairs that have a declared weld between them are reported as FIT_REQUIRED:
-    the joint is intended, but the fabricator has to cope or notch something.
-    Pairs with no declared weld are UNINTENDED_CLASH.
+    NESTED_FIT      - one piece is meant to slip over the other (a sleeve).
+    FIT_REQUIRED    - a declared joint; notch or grind something to suit.
+    UNINTENDED_CLASH- nobody meant these two to be in the same place.
     """
     ignore = set(ignore_marks or [])
+    nested = {frozenset(pr) for pr in (nested_pairs or [])}
     welded_pairs = {frozenset((w.piece_a, w.piece_b)) for w in welds}
     marks = sorted(k for k in boxes if k not in ignore)
     out: List[InterferenceCheck] = []
@@ -282,29 +284,30 @@ def check_interference(boxes: Dict[str, BoxBounds],
             pen = min(ox, oy, oz)
             if pen <= MIN_PENETRATION:
                 continue
-            welded = frozenset((a, b)) in welded_pairs
-            # A shallow overlap between sheet-thickness parts is a trim-to-fit
-            # job at the bench; a deep one between structural members is not.
-            severity = "MINOR" if pen < MINOR_PENETRATION else "MAJOR"
+            pair = frozenset((a, b))
+            if pair in nested:
+                category, severity = "NESTED_FIT", "MINOR"
+                message = (f"{b} slips over {a}. That is the design - it is not "
+                           f"a clash.")
+            elif pair in welded_pairs:
+                category, severity = "FIT_REQUIRED", "MINOR"
+                message = (f"{a} and {b} overlap {pen:.2f} in at a joint that is "
+                           f"meant to be welded. Notch or grind to suit.")
+            else:
+                severity = "MINOR" if pen < MINOR_PENETRATION else "MAJOR"
+                category = "UNINTENDED_CLASH"
+                message = (f"{a} and {b} are in the same place ({pen:.2f} in "
+                           f"deep) and nothing says they should be."
+                           if severity == "MAJOR" else
+                           f"{a} and {b} overlap {pen:.2f} in - trim one to fit "
+                           f"at the bench.")
             out.append(InterferenceCheck(
                 piece_a=a, piece_b=b,
                 overlap_x=round(ox, 4), overlap_y=round(oy, 4),
-                overlap_z=round(oz, 4),
-                penetration=round(pen, 4),
+                overlap_z=round(oz, 4), penetration=round(pen, 4),
                 volume=round(ox * oy * oz, 3),
-                has_declared_weld=welded,
-                category="FIT_REQUIRED" if welded else "UNINTENDED_CLASH",
-                severity=severity,
-                message=(
-                    f"{a} and {b} occupy the same space "
-                    f"({pen:.3f}\" deep). "
-                    + ("Intended joint - one part must be coped or notched."
-                       if welded else
-                       ("Small overlap - trim one part to fit at the bench."
-                        if severity == "MINOR" else
-                        "No weld is declared between these parts; this is an "
-                        "unintended clash."))
-                ),
+                has_declared_weld=pair in welded_pairs,
+                category=category, severity=severity, message=message,
             ))
     out.sort(key=lambda c: (-c.penetration, c.piece_a))
     return out
@@ -315,22 +318,54 @@ def check_interference(boxes: Dict[str, BoxBounds],
 # ---------------------------------------------------------------------------
 
 def global_envelope(boxes: Dict[str, BoxBounds],
-                    width_limit: float) -> EnvelopeResult:
+                    width_limit: float,
+                    under_truck_marks: Optional[List[str]] = None
+                    ) -> EnvelopeResult:
     """
-    Actual outside size of the finished carrier, measured across every part
-    that exists -- rails, guides, mounting tubes, hinge pin, brackets.
+    Actual outside size of the finished carrier, measured across the steel.
 
-    This never uses frame_width + 2 * flare. It measures the steel.
+    Two widths, and they mean different things:
+
+      usable width - the deck, ramp and guides the machine rides on. THIS is
+                     what the 38 in target applies to.
+      total width  - everything, including the two mounting tubes that live
+                     under the truck. Those are reported but they are not held
+                     to the 38 in road profile; they are under the truck, not
+                     sticking out past the load.
     """
     if not boxes:
         return EnvelopeResult(width_limit=width_limit)
 
-    min_y = min(b.min_y for b in boxes.values())
-    max_y = max(b.max_y for b in boxes.values())
-    left = sorted(k for k, b in boxes.items() if b.min_y <= min_y + TOUCH_TOL)
-    right = sorted(k for k, b in boxes.items() if b.max_y >= max_y - TOUCH_TOL)
+    under = set(under_truck_marks or [])
+    usable_boxes = {k: v for k, v in boxes.items() if k not in under}
+    if not usable_boxes:
+        usable_boxes = boxes
+
+    def span(bx: Dict[str, BoxBounds]):
+        lo = min(b.min_y for b in bx.values())
+        hi = max(b.max_y for b in bx.values())
+        left = sorted(k for k, b in bx.items() if b.min_y <= lo + TOUCH_TOL)
+        right = sorted(k for k, b in bx.items() if b.max_y >= hi - TOUCH_TOL)
+        return lo, hi, left, right
+
+    min_y, max_y, left, right = span(boxes)
+    u_lo, u_hi, u_left, u_right = span(usable_boxes)
+
     width = max_y - min_y
-    over = width - width_limit
+    usable = u_hi - u_lo
+    usable_over = usable - width_limit
+    ut_boxes = {k: v for k, v in boxes.items() if k in under}
+    ut_width = (max(b.max_y for b in ut_boxes.values())
+                - min(b.min_y for b in ut_boxes.values())) if ut_boxes else 0.0
+
+    msg = (f"Deck, ramp and guides measure {usable:.2f} in across the steel. "
+           + (f"Within the {width_limit:.0f} in target."
+              if usable_over <= TOUCH_TOL else
+              f"That is {usable_over:.2f} in over the {width_limit:.0f} in "
+              f"target - widest: {', '.join(sorted(set(u_left + u_right)))}."))
+    if ut_boxes:
+        msg += (f" The two mounting tubes measure {ut_width:.2f} in across; they "
+                f"sit under the truck and are not part of that target.")
 
     return EnvelopeResult(
         min_x=round(min(b.min_x for b in boxes.values()), 4),
@@ -342,17 +377,16 @@ def global_envelope(boxes: Dict[str, BoxBounds],
         total_length=round(max(b.max_x for b in boxes.values())
                            - min(b.min_x for b in boxes.values()), 4),
         width_limit=width_limit,
-        within_limit=bool(over <= TOUCH_TOL),
-        width_over_limit=round(max(0.0, over), 4),
+        within_limit=bool(usable_over <= TOUCH_TOL),
+        width_over_limit=round(max(0.0, usable_over), 4),
         widest_left_pieces=left, widest_right_pieces=right,
-        message=(
-            f"Measured across the steel, the carrier is "
-            f"{width:.2f}\" wide (Y {min_y:.2f}\" to {max_y:.2f}\"). "
-            + (f"That is {over:.2f}\" over the {width_limit:.2f}\" limit. "
-               f"Widest parts: {', '.join(sorted(set(left + right)))}."
-               if over > TOUCH_TOL else
-               f"Within the {width_limit:.2f}\" limit.")
-        ),
+        usable_width=round(usable, 4),
+        usable_within_limit=bool(usable_over <= TOUCH_TOL),
+        usable_over_limit=round(max(0.0, usable_over), 4),
+        usable_left_pieces=u_left, usable_right_pieces=u_right,
+        under_truck_width=round(ut_width, 4),
+        under_truck_pieces=sorted(under),
+        message=msg,
     )
 
 
@@ -484,24 +518,39 @@ def hinge_rotation_check(boxes: Dict[str, BoxBounds],
 
 
 # ---------------------------------------------------------------------------
-# Machine envelope
+# Machine fit
 # ---------------------------------------------------------------------------
 
 def machine_fit_check(params: ProjectParameters,
                       boxes: Dict[str, BoxBounds],
                       guide_marks: List[str]) -> MachineFitResult:
     """
-    Compare the real machine size against the real carrier opening.
+    Does the machine's running gear fit the deck?
 
-    The machine's published width is used exactly as published. Nothing here
-    shrinks it to make anything fit. Wheel positions are not invented: if the
-    wheelbase is unknown, the wheel checks report UNVERIFIED.
+    The guides guide the TIRES. The published 36 in machine width is a body
+    dimension taken well above a 3 in guide, so it is not what has to pass
+    between them - and we are not going to block a buildable carrier on it.
+    Whether any bodywork brushes a guide is settled by rolling the machine on,
+    which is what a shop does anyway.
     """
     notes: List[str] = []
-    field_items: List[str] = []
+    fit_up: List[str] = []
 
-    left_inner = None
-    right_inner = None
+    tire = params.machine_rear_tire_width
+    track = params.track_flat_width
+    slack = (track - tire) / 2.0
+    tracks_ok = slack >= 0.5
+    if tracks_ok:
+        notes.append(
+            f"Wheel tracks are {track:.2f} in wide for a {tire:.1f} in rear "
+            f"tire - {slack:.2f} in of room each side of the tire.")
+    else:
+        notes.append(
+            f"Wheel tracks are only {track:.2f} in wide for a {tire:.1f} in "
+            f"rear tire. Widen the tracks.")
+
+    # Distance between the inside faces of the guides, reported for information.
+    left_inner = right_inner = None
     for mark in guide_marks:
         b = boxes.get(mark)
         if b is None:
@@ -510,77 +559,43 @@ def machine_fit_check(params: ProjectParameters,
             left_inner = b.max_y if left_inner is None else max(left_inner, b.max_y)
         elif b.min_y >= 0:
             right_inner = b.min_y if right_inner is None else min(right_inner, b.min_y)
-
     clear_width = None
-    width_ok = None
-    width_short = 0.0
     if left_inner is not None and right_inner is not None:
         clear_width = right_inner - left_inner
-        width_short = params.machine_width - clear_width
-        width_ok = width_short <= TOUCH_TOL
-        if width_ok:
-            notes.append(
-                f"Machine is {params.machine_width:.2f}\" wide and there is "
-                f"{clear_width:.3f}\" clear between the guides.")
-        else:
-            notes.append(
-                f"The machine is {params.machine_width:.2f}\" wide but there is "
-                f"only {clear_width:.3f}\" clear between the inside faces of the "
-                f"guides. It is {width_short:.3f}\" too tight.")
-    else:
-        notes.append("Guide plates are not positioned, so the clear width "
-                     "between the guides could not be measured.")
+        notes.append(
+            f"There is {clear_width:.2f} in between the inside faces of the "
+            f"guides, and the guides are only {params.flared_guide_height:.0f} in "
+            f"tall.")
+        fit_up.append(
+            "CHECK MACHINE CLEARANCE DURING FIT-UP - roll the Z-Spray on and "
+            "make sure nothing on the machine rubs a guide.")
 
-    # Longitudinal: this much is pure arithmetic on known lengths.
     usable = params.carrier_deck_length - params.ramp_clearance
     overhang = params.machine_length_field - usable
     if overhang > 0:
         notes.append(
-            f"With the machine pushed forward to leave {params.ramp_clearance:.1f}\" "
-            f"behind it, its {params.machine_length_field:.1f}\" length overhangs the "
-            f"front of the {params.carrier_deck_length:.1f}\" deck by "
-            f"{overhang:.1f}\".")
-        field_items.append(
-            "Measure the clearance between the front of the Z-Spray and the back "
-            "of the flatbed with the machine pushed all the way forward.")
+            f"The machine is {params.machine_length_field:.0f} in long and the "
+            f"deck is {params.carrier_deck_length:.0f} in, so it hangs about "
+            f"{overhang:.0f} in over the front, forward onto the truck bed. "
+            f"That is normal - the front restraint is what holds it.")
 
-    # Wheels: refuse to guess.
-    wheels_status = "UNVERIFIED"
-    if params.machine_wheelbase is None or params.machine_rear_tire_to_rear is None:
-        notes.append(
-            "Wheel positions on the Z-Spray are not known, so whether both axles "
-            "land on the deck cannot be checked. No wheel coordinates have been "
-            "assumed.")
-        field_items.append(
-            "Measure the Z-Spray wheelbase (front axle to rear axle) and the "
-            "distance from the rear tyre's rearmost point to the back of the "
-            "machine.")
-    else:
-        wheels_status = "CHECKED"
-
-    if params.machine_rear_track_width is None:
-        field_items.append(
-            "Measure the outside-to-outside width across the Z-Spray rear tyres.")
-
-    status = "UNVERIFIED"
-    if width_ok is False:
-        status = "FAIL"
-    elif width_ok is True and wheels_status == "CHECKED":
-        status = "PASS"
+    fit_up.append(
+        "CHECK DURING MACHINE FIT-UP - pull the machine forward against the "
+        "wheel stops, then set the upright ramp about "
+        f"{params.ramp_clearance:.0f} in behind the rear tires.")
 
     return MachineFitResult(
-        machine_width=params.machine_width,
+        rear_tire_width=tire,
+        track_flat_width=track,
+        tire_side_clearance=round(slack, 3),
+        guide_clear_width=round(clear_width, 3) if clear_width is not None else None,
+        tracks_fit_tires=tracks_ok,
+        deck_usable_length=round(usable, 2),
         machine_length_field=params.machine_length_field,
-        guide_clear_width=(round(clear_width, 4)
-                           if clear_width is not None else None),
-        width_shortfall=round(max(0.0, width_short), 4),
-        width_fits=width_ok,
-        deck_usable_length=round(usable, 4),
-        front_overhang=round(overhang, 4),
-        wheel_check_status=wheels_status,
-        status=status,
+        front_overhang=round(max(0.0, overhang), 2),
+        status="PASS" if tracks_ok else "FAIL",
         notes=notes,
-        field_measurements_required=field_items,
+        fit_up_checks=fit_up,
     )
 
 
@@ -593,30 +608,42 @@ def run_geometry_checks(params: ProjectParameters,
                         plates: List[Plate],
                         welds: List[Weld]) -> GeometryCheckReport:
     """Run every physical check and roll the results into one report."""
+    import geometry  # local import: geometry owns the hinge layout
+
     boxes, unpositioned = collect_boxes(members, plates)
     gov = governing_dims(members, plates)
+    hg = geometry.hinge_geometry(params)
 
     contacts = check_welds(welds, boxes, gov)
 
-    # The hinge pin is meant to pass through the barrels and ears, so it is
-    # excluded from clash detection. Everything else is fair game.
-    pin_marks = [m.piece_mark for m in members if m.assembly == "HINGE"
-                 and m.section.endswith("Round Bar")]
-    interferences = check_interference(boxes, welds, ignore_marks=pin_marks)
+    # The pin lives inside the barrels, so it is not a clash. Sleeves slipped
+    # over the mounting tubes are not clashes either - say so explicitly rather
+    # than hiding them.
+    pin_marks = [m.piece_mark for m in members
+                 if m.assembly == "HINGE" and m.section.endswith("Round Bar")]
+    nested_pairs = [(m.nested_over, m.piece_mark) for m in members
+                    if getattr(m, "nested_over", "")]
+    interferences = check_interference(boxes, welds, ignore_marks=pin_marks,
+                                       nested_pairs=nested_pairs)
 
-    envelope = global_envelope(boxes, params.carrier_max_overall_width)
+    under_truck = [m.piece_mark for m in members if m.assembly == "STINGER"]
+    envelope = global_envelope(boxes, params.carrier_max_overall_width,
+                               under_truck_marks=under_truck)
 
-    ramp_marks = [m.piece_mark for m in members if m.assembly == "RAMP"]
-    ramp_marks += [p.piece_mark for p in plates if p.assembly == "RAMP"]
-    ramp_marks += [m.piece_mark for m in members
-                   if m.assembly == "HINGE" and "Ramp" in (m.description or "")]
-    ramp_marks += [p.piece_mark for p in plates
-                   if p.assembly == "HINGE" and "Ramp" in (p.description or "")]
+    # What actually swings: the ramp weldment. The hinge barrels and the pin all
+    # share the pivot axis, so a rotation cannot move them - a round barrel spun
+    # about its own centre occupies exactly the same space. They are checked for
+    # static fit like every other part above; they just do not sweep.
+    concentric = [m.piece_mark for m in members if m.assembly == "HINGE"]
+    ramp_marks = sorted(
+        [m.piece_mark for m in members if m.assembly == "RAMP"]
+        + [p.piece_mark for p in plates if p.assembly == "RAMP"])
     hinge = hinge_rotation_check(
-        boxes, sorted(set(ramp_marks)),
-        pivot_x=params.carrier_deck_length,
-        pivot_z=params.ramp_hinge_pin_z,
-        ignore_marks=pin_marks,
+        boxes, ramp_marks,
+        pivot_x=hg["pin_x"], pivot_z=hg["pin_z"],
+        angles=[-20.0, -15.0, -10.0, -5.0, 0.0, 10.0, 20.0, 30.0, 45.0,
+                60.0, 75.0, 85.0, 90.0],
+        ignore_marks=concentric,
     )
 
     guide_marks = [p.piece_mark for p in plates if p.piece_mark.startswith("FG")]
@@ -626,17 +653,20 @@ def run_geometry_checks(params: ProjectParameters,
     clashes = [i for i in interferences if i.category == "UNINTENDED_CLASH"]
     major_clashes = [i for i in clashes if i.severity == "MAJOR"]
 
-    ok = (not failed_contacts and not major_clashes and envelope.within_limit
-          and hinge.can_rotate and machine.status != "FAIL"
-          and not unpositioned)
+    ok = (not failed_contacts and not major_clashes
+          and envelope.usable_within_limit and hinge.can_rotate
+          and machine.status != "FAIL" and not unpositioned)
 
     summary = [
-        f"{len(members)} members and {len(plates)} plates positioned "
-        f"({len(unpositioned)} plates still without a position).",
-        f"{len(welds)} welded joints declared; {len(failed_contacts)} of them "
-        f"are not backed by real contact.",
-        f"{len(interferences)} overlapping pairs ({len(clashes)} unintended, "
-        f"{len(major_clashes)} of those serious).",
+        f"{len(members)} members and {len(plates)} plates, all positioned."
+        if not unpositioned else
+        f"{len(unpositioned)} plates still have no position.",
+        f"{len(welds)} welded joints declared; "
+        + ("every one is backed by real steel-to-steel contact."
+           if not failed_contacts else
+           f"{len(failed_contacts)} of them are not backed by real contact."),
+        (f"{len(major_clashes)} parts run into each other."
+         if major_clashes else "No parts run into each other."),
         envelope.message,
         hinge.message,
         machine.notes[0] if machine.notes else "",

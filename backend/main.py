@@ -12,6 +12,7 @@ from reportlab.lib import colors
 from models import ProjectParameters, ProjectData, StatusEnum
 from geometry import generate_fabrication_assembly, get_project_provenance, calculate_structural_checks
 from drawings import generate_shop_drawings, fraction_str, DraftingCanvas, draw_sheet_s9
+import geometry as geometry_mod
 from optimizer import optimize_stock
 
 app = FastAPI(title="Z Spray Carrier Fabricator API", version="2.0.0")
@@ -95,14 +96,18 @@ def export_package(params: ProjectParameters):
     pp_c.setFont("Helvetica-Bold", 14)
     pp_c.drawString(50, pp_h - 50, "Z-SPRAY CARRIER - PROJECT PARAMETERS & PROVENANCE REPORT")
     pp_c.setFont("Helvetica", 8)
-    pp_c.drawString(50, pp_h - 65, "Status Classifications: MEASURED | OEM | DESIGN | CALCULATED | ESTIMATED_UNVERIFIED")
+    pp_c.drawString(50, pp_h - 65, "MEASURED | OEM | DESIGN | CALCULATED | FIELD_FIT (set on the truck) | MODEL_ONLY (drawing coordinate, NOT a shop dimension)")
     
     pp_y = pp_h - 95
     for k, item in provenance.items():
         if pp_y < 50:
             pp_c.showPage()
             pp_y = pp_h - 50
-        status_color = colors.HexColor("#D90429") if item.status == StatusEnum.ESTIMATED_UNVERIFIED else colors.HexColor("#003566")
+        status_color = (colors.HexColor("#D90429")
+                        if item.status in (StatusEnum.ESTIMATED_UNVERIFIED,
+                                          StatusEnum.FIELD_FIT,
+                                          StatusEnum.MODEL_ONLY)
+                        else colors.HexColor("#003566"))
         pp_c.setFillColor(status_color)
         pp_c.setFont("Helvetica-Bold", 8)
         pp_c.drawString(50, pp_y, f"[{item.status.value}] {item.name}: {item.value} {item.units}")
@@ -117,7 +122,7 @@ def export_package(params: ProjectParameters):
     with open(bom_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["piece_mark", "description", "assembly", "shape", "size", "grade", "cut_length", "quantity", "unit_weight", "total_weight", "notes"]
+            fieldnames=["piece_mark", "description", "assembly", "shape", "size", "grade", "cut_length", "quantity", "unit_weight", "total_weight", "field_fit", "notes"]
         )
         writer.writeheader()
         writer.writerows(bom)
@@ -127,7 +132,7 @@ def export_package(params: ProjectParameters):
     with open(cut_list_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["piece_mark", "section", "grade", "cut_length", "quantity", "cut_type", "cut_angle_left", "cut_angle_right", "notes"]
+            fieldnames=["piece_mark", "section", "grade", "cut_length", "quantity", "cut_type", "cut_angle_left", "cut_angle_right", "field_fit", "notes"]
         )
         writer.writeheader()
         writer.writerows(cut_list)
@@ -142,97 +147,144 @@ def export_package(params: ProjectParameters):
         writer.writeheader()
         writer.writerows(stock_data["purchase_list"])
         
-    # 7. README-FOR-FABRICATOR.txt (Enumerates every unverified item)
-    unverified_items = [v for v in provenance.values() if v.status == StatusEnum.ESTIMATED_UNVERIFIED]
+    # 7. README-FOR-FABRICATOR.txt
+    field_fit_items = [v for v in provenance.values()
+                       if v.status in (StatusEnum.FIELD_FIT, StatusEnum.MODEL_ONLY)]
+    structural = assembly["structural"]
+    hinge = assembly["hinge"]
     readme_path = os.path.join(output_dir, "README-FOR-FABRICATOR.txt")
     with open(readme_path, "w", encoding="utf-8") as f:
-        f.write("================================================================================\n")
-        f.write("Z SPRAY CARRIER FABRICATION PACKAGE - README FOR STEEL FITTER / FABRICATOR\n")
-        f.write("================================================================================\n\n")
-        f.write("PROJECT: 2026 Z Turf Equipment Z-Spray Junior (Model ZSX3624) Carrier\n")
-        f.write("MOUNT:   2015 Ford F-350 Flatbed Truck Twin Receiver Hitch\n")
-        f.write("UNITS:   INCHES (USCS) - Dimensions govern over graphical scaling.\n\n")
-        f.write("PACKAGE CONTENTS:\n")
-        f.write("  1. Z-Spray-Carrier-Shop-Drawings.pdf  - 9-Sheet Vector PDF Shop Drawing Set\n")
-        f.write("  2. BOM.csv                           - Bill of Materials with weights and grades\n")
-        f.write("  3. Cut-List.csv                      - Fabrication shop cut list with angles and marks\n")
-        f.write("  4. Purchase-List.csv                 - Comprehensive steel, plate, grating & hardware schedule\n")
-        f.write("  5. Stock-Cutting-Plan.pdf            - 1D linear nesting layout diagram by stick\n")
-        f.write("  6. Project-Parameters.pdf            - Full engineering parameter and provenance list\n")
-        f.write("  7. README-FOR-FABRICATOR.txt         - This verification and layout guidance document\n\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("STRUCTURAL STATUS ADVISORY: [FAIL - UNASSISTED CANTILEVER]\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("Under 2.0g dynamic vertical shock (1,465 lb suspended payload), cantilever bending stress\n")
-        f.write("in dual 2x2x1/4 A500 Gr B stingers reaches 66,210 psi (yield strength = 46,000 psi).\n")
-        f.write("FACTOR OF SAFETY = 0.69 (Target FOS = 2.00) -> STATUS: FAIL.\n")
-        f.write("MANDATORY REINFORCEMENT: Install twin diagonal tubular struts from carrier rails at X=38\"\n")
-        f.write("up to truck flatbed headache rack / subframe tie-down anchors (FOS > 3.0), or add an underframe\n")
-        f.write("king-post truss before highway transport under load.\n\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write(f"DOES IT ACTUALLY FIT TOGETHER?  [{checks.overall_status}]\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("These are measured from the real size of every piece of steel in the model,\n")
-        f.write("not from notes or drawings.\n\n")
+        w = f.write
+        w("================================================================================\n")
+        w("Z SPRAY CARRIER - BUILD NOTES FOR THE FABRICATOR\n")
+        w("================================================================================\n\n")
+        w("What this is: a welded steel carrier for a Z-Spray Junior that hangs off\n")
+        w("the two receiver sockets already on the truck. The truck does not get\n")
+        w("modified. Nothing bolts or welds to the flatbed or the headache rack.\n\n")
+        w("All dimensions are in inches.\n\n")
+        w("IN THIS PACKAGE:\n")
+        w("  Z-Spray-Carrier-Shop-Drawings.pdf   drawing sheets\n")
+        w("  BOM.csv                             every piece in the carrier\n")
+        w("  Cut-List.csv                        what to cut and how long\n")
+        w("  Purchase-List.csv                   what to buy\n")
+        w("  Stock-Cutting-Plan.pdf              how to lay the cuts out on the sticks\n")
+        w("  Project-Parameters.pdf              where every number came from\n")
+        w("  README-FOR-FABRICATOR.txt           this file\n\n")
+
+        w("--------------------------------------------------------------------------------\n")
+        w("BUILD ORDER\n")
+        w("--------------------------------------------------------------------------------\n")
+        for i, step in enumerate(assembly.get("fabrication_sequence", []), start=1):
+            w(f"{i:2d}. {step}\n")
+        w("\n")
+
+        w("--------------------------------------------------------------------------------\n")
+        w("FIELD FIT - DO NOT MEASURE THESE OFF THE DRAWING\n")
+        w("--------------------------------------------------------------------------------\n")
+        w("The truck is the fixture. Slide the two mounting tubes into the truck's own\n")
+        w("sockets and the spacing sets itself. There is no receiver measurement to take,\n")
+        w("no socket width to check and no centreline to calculate.\n\n")
+        w("  * MOUNTING TUBE SPACING ............ FIELD FIT TO TRUCK\n")
+        w("  * HITCH PIN HOLES ................. TRANSFER PIN HOLES FROM TRUCK\n")
+        w("  * MOUNT BEAM LENGTHS (MB1/2/3) .... CUT TO FIT between the mounting tubes\n")
+        w("  * SLEEVE POSITION (SL-L / SL-R) ... slide up against the socket face\n")
+        w("  * RAMP / REAR TIRE GAP ............ CHECK DURING MACHINE FIT-UP\n\n")
+        for u in field_fit_items:
+            w(f"[{u.status.value}] {u.name}: {u.source_note}\n")
+        w("\n")
+
+        w("--------------------------------------------------------------------------------\n")
+        w("THE HINGE - THE ONLY PART WORTH READING TWICE\n")
+        w("--------------------------------------------------------------------------------\n")
+        w(f"One continuous {params.hinge_pin_dia:.3f} in pin. "
+          f"{params.hinge_barrel_count} barrels of "
+          f"{params.hinge_barrel_od:.3f} in OD tube, {params.hinge_barrel_length:.0f} in long,\n")
+        w("alternating carrier / ramp. No ears, no tabs, nothing machined.\n\n")
+        w(f"THE GAP BETWEEN THE DECK AND THE RAMP IS ONE BARREL DIAMETER "
+          f"({params.hinge_barrel_od:.3f} in).\n")
+        w("Lay a scrap of the barrel stock in the gap and that is your spacer.\n\n")
+        w("Each barrel sits in the corner of its own cross tube: bottom of the barrel\n")
+        w("flush with the top of the frame, back of the barrel against the cross tube\n")
+        w("face. Fillet above and below, full length of the barrel.\n\n")
+        w(f"The bore is {params.hinge_barrel_id:.3f} in on a {params.hinge_pin_dia:.3f} in pin. "
+          f"That 1/8 in of slop is deliberate -\n")
+        w("it swings freely and never needs reaming after welding.\n\n")
+        w("TACK FIRST - TEST FIT BEFORE FINAL WELD.\n")
+        w("CHECK RAMP SWING BEFORE FINAL WELD. If it rubs, ease the leading edge of\n")
+        w("the cross tube with a grinder. Then weld it out.\n\n")
+
+        w("--------------------------------------------------------------------------------\n")
+        w(f"DOES IT ACTUALLY FIT TOGETHER?   [{checks.overall_status}]\n")
+        w("--------------------------------------------------------------------------------\n")
+        w("Checked against the real outside size of every piece of steel in the model.\n\n")
         for line in checks.summary:
-            f.write(f"  * {line}\n")
-        f.write("\n")
+            w(f"  * {line}\n")
+        w("\n")
 
         bad_contacts = [c for c in checks.contacts if not c.passed]
         if bad_contacts:
-            f.write("JOINTS THAT CANNOT BE WELDED AS DRAWN:\n")
+            w("JOINTS THAT CANNOT BE WELDED AS DRAWN:\n")
             for c in bad_contacts:
-                f.write(f"  [X] {c.message}\n")
-            f.write("\n")
-
+                w(f"  [X] {c.message}\n")
+            w("\n")
         major = [i for i in checks.interferences
                  if i.category == "UNINTENDED_CLASH" and i.severity == "MAJOR"]
         if major:
-            f.write("PARTS THAT RUN INTO EACH OTHER:\n")
+            w("PARTS THAT RUN INTO EACH OTHER:\n")
             for i in major:
-                f.write(f"  [X] {i.message}\n")
-            f.write("\n")
-
+                w(f"  [X] {i.message}\n")
+            w("\n")
         if not checks.hinge.can_rotate:
-            f.write("RAMP SWING:\n")
+            w("THE RAMP WILL NOT SWING AS DRAWN:\n")
             for col in checks.hinge.collisions[:10]:
-                f.write(f"  [X] {col.message}\n")
-            f.write("\n")
+                w(f"  [X] {col.message}\n")
+            w("\n")
 
-        if checks.machine.status != "PASS":
-            f.write("MACHINE FIT:\n")
-            for n in checks.machine.notes:
-                f.write(f"  [!] {n}\n")
-            f.write("\n")
+        w("--------------------------------------------------------------------------------\n")
+        w(f"IS IT STRONG ENOUGH?   [{structural['status']}]\n")
+        w("--------------------------------------------------------------------------------\n")
+        for n in structural["notes"]:
+            w(f"  * {n}\n")
+        if structural["reinforcement_recommendations"]:
+            w("\n")
+            for r in structural["reinforcement_recommendations"]:
+                w(f"  ! {r}\n")
+        w("\n")
 
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("CRITICAL UNVERIFIED FIELD DIMENSIONS - MUST CONFIRM BEFORE CUTTING STEEL:\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        for u in unverified_items:
-            f.write(f"[*] {u.name.upper()} (Current provisional design: {u.value} {u.units})\n")
-            f.write(f"    Description: {u.description}\n")
-            f.write(f"    Requirement: {u.source_note}\n\n")
-            
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("KEY FABRICATION CONVENTIONS & DATUMS:\n")
-        f.write("--------------------------------------------------------------------------------\n")
-        f.write("- FRONT DATUM (X = 0.00\"): Established at front face of front crossmember C1.\n")
-        f.write("  Measure all longitudinal crossmembers directly from this front datum.\n")
-        f.write("- HINGE CENTERLINE (X = 63.00\"): Centerline of the single rigid ramp pivot pin.\n")
-        f.write("- RUNNING DECK ELEVATION (Z = 0.00\"): Target running surface is 17.0\" above ground.\n")
-        f.write(f"- BASE FRAME WIDTH: {params.carrier_width:.2f}\" outside-to-outside of outer longitudinal tubes M1.\n")
-        f.write(f"- MAXIMUM ALLOWED WIDTH: {params.carrier_max_overall_width:.2f}\" (HARD CONSTRAINT).\n")
-        f.write(f"- MEASURED WIDTH OF THIS DESIGN: {checks.envelope.total_width:.2f}\" "
-                f"across {', '.join(sorted(set(checks.envelope.widest_left_pieces + checks.envelope.widest_right_pieces)))}.\n")
-        f.write(f"- WHEEL TRACKS: {params.track_flat_width:.2f}\" flat width per side; "
-                f"{params.track_center_gap:.2f}\" clear center cleanout opening.\n")
-        f.write(f"- TWIN MOUNT STINGERS: Spaced {params.receiver_spacing:.2f}\" center-to-center (UNVERIFIED - measure on the truck).\n")
-        f.write("- HINGE CLEARANCE: 1-1/8\" OD x 0.172\" wall DOM tubing (0.781\" ID) provides intentional\n")
-        f.write("  0.031\" (1/32\") clearance over 0.750\" pin to prevent binding under outdoor corrosion.\n")
-        f.write("- WELD REQUIREMENTS: Structural tubes welded with 3/16\" fillet all around. Gussets 1/4\" fillet.\n")
-        f.write("- RAMP: ONE rigid 61.00\" assembly. No intermediate folding joint.\n\n")
-        f.write("================================================================================\n")
-        
+        w("--------------------------------------------------------------------------------\n")
+        w("KEY NUMBERS\n")
+        w("--------------------------------------------------------------------------------\n")
+        w("  TRUCK SIDE is X = 0. RAMP SIDE is the back. Measure everything from the\n")
+        w("  truck end of the side rails.\n")
+        w(f"  Deck frame ................ {params.carrier_deck_length:.0f} in long, "
+          f"{params.carrier_width:.0f} in wide outside the side rails\n")
+        w(f"  Deck height ............... about {params.deck_height:.2f} in off the ground\n")
+        w(f"  Usable width (deck, ramp, guides) ... "
+          f"{checks.envelope.usable_width:.2f} in measured across the steel "
+          f"(target {params.carrier_max_overall_width:.0f} in)\n")
+        w(f"  Mounting tubes under the truck ...... "
+          f"{checks.envelope.under_truck_width:.2f} in across - under the truck, "
+          f"not part of that target\n")
+        w(f"  Wheel tracks .............. {params.track_flat_width:.2f} in each, "
+          f"{params.track_center_gap:.0f} in open down the middle\n")
+        w(f"  Rear tire ................. {params.machine_rear_tire_size} "
+          f"({params.machine_rear_tire_width:.1f} in wide) - "
+          f"{checks.machine.tire_side_clearance:.2f} in of room each side\n")
+        w(f"  Ramp ...................... {params.ramp_length:.0f} in, one rigid "
+          f"piece, sits at about {assembly['ramp_angle_deg']:.0f} deg when down\n")
+        w(f"  Ramp guides ............... start {geometry_mod.RAMP_GUIDE_SETBACK:.2f} in "
+          f"back from the front of the ramp - LEAVE THAT GAP\n")
+        w(f"  Hinge pin ................. {params.hinge_pin_dia:.3f} in x "
+          f"{params.hinge_pin_length:.0f} in, at X = {hinge['pin_x']:.3f} in, "
+          f"{hinge['pin_z']:.3f} in above the deck\n")
+        w(f"  Carrier weight ............ about {assembly['total_carrier_weight']:.0f} lb "
+          f"(ramp about {assembly['ramp_weight']:.0f} lb of that)\n")
+        w("  Welds ..................... 3/16 fillet on frame tubes, 1/4 on the "
+          "mount beams,\n                              sleeves and hinge barrels\n\n")
+        for fu in checks.machine.fit_up_checks:
+            w(f"  ! {fu}\n")
+        w("\n================================================================================\n")
+
     # 8. Zip archive of complete fabrication package
     zip_path = os.path.join(project_root, "output", "Z-Spray-Carrier-Fabrication-Package.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:

@@ -184,32 +184,37 @@ def optimize_stock(
         plate_groups[key] = plate_groups.get(key, 0.0) + area
         
     for (thk, grd), net_sq_in in plate_groups.items():
-        gross_sq_in = net_sq_in * 1.20 # 20% waste allowance
+        gross_sq_in = net_sq_in * 1.20   # 20% for shear kerf and drop
         gross_sq_ft = gross_sq_in / 144.0
-        # Weight = volume * density (0.2836 lb/in^3)
-        plate_wt = gross_sq_in * thk * 0.2836
-        
-        # Standard sheet selection
+
+        # Report what you actually BUY, not what ends up in the carrier. If the
+        # job needs a full sheet, the purchase row is a full sheet and the
+        # weight is the full sheet's weight.
         if gross_sq_ft <= 4.0:
-            unit_desc = f"24\" x 24\" x {thk}\" Plate Drop"
-            sheets_needed = math.ceil(gross_sq_ft / 4.0)
+            unit_desc = f"24 x 24 in x {thk} in plate drop"
+            sheet_sq_ft = 4.0
         elif gross_sq_ft <= 8.0:
-            unit_desc = f"24\" x 48\" x {thk}\" Plate Drop"
-            sheets_needed = math.ceil(gross_sq_ft / 8.0)
+            unit_desc = f"24 x 48 in x {thk} in plate drop"
+            sheet_sq_ft = 8.0
         else:
-            unit_desc = f"48\" x 96\" (4x8) x {thk}\" Steel Plate Sheet"
-            sheets_needed = math.ceil(gross_sq_ft / 32.0)
-            
+            unit_desc = f"48 x 96 in (4x8) x {thk} in steel plate sheet"
+            sheet_sq_ft = 32.0
+        sheets_needed = max(1, math.ceil(gross_sq_ft / sheet_sq_ft))
+        purchased_sq_in = sheets_needed * sheet_sq_ft * 144.0
+        purchased_wt = purchased_sq_in * thk * 0.2836
+
         purchase_rows.append({
             "category": "PLATE",
-            "section": f"{thk}\" Steel Plate",
+            "section": f"{thk} in steel plate",
             "grade": grd,
             "stick_length": 0.0,
             "quantity": sheets_needed,
             "unit_size": unit_desc,
             "total_purchased_length": 0.0,
-            "total_purchased_weight": round(plate_wt, 1),
-            "notes": f"Gross requirement: {gross_sq_ft:.1f} sq ft (includes 20% shear/laser kerf & drop allowance)."
+            "total_purchased_weight": round(purchased_wt, 1),
+            "notes": f"Buy {sheets_needed} x {unit_desc}. The carrier uses about "
+                     f"{net_sq_in / 144.0:.1f} sq ft; weight shown is what you "
+                     f"carry out of the steel yard."
         })
 
     # Grating items
@@ -223,41 +228,40 @@ def optimize_stock(
             grating_net_sq_in += w * l * qty
             
     if grating_net_sq_in > 0:
-        grating_gross_sq_ft = (grating_net_sq_in * 1.15) / 144.0 # 15% allowance
-        grating_sheets = math.ceil(grating_gross_sq_ft / 32.0) # Standard 4x8 sheet = 32 sq ft
-        grating_wt = grating_gross_sq_ft * 1.80 # 1.80 lb/sqft
+        grating_gross_sq_ft = (grating_net_sq_in * 1.15) / 144.0
+        grating_sheets = max(1, math.ceil(grating_gross_sq_ft / 32.0))
+        grating_wt = grating_sheets * 32.0 * 1.80   # full sheets, as purchased
         purchase_rows.append({
             "category": "GRATING",
-            "section": "#9 1-1/2\" Flattened Expanded Metal",
+            "section": "#9 1-1/2 in flattened expanded metal",
             "grade": "ASTM A36 Carbon Steel",
             "stick_length": 0.0,
             "quantity": grating_sheets,
-            "unit_size": "48\" x 96\" (4x8) Sheet",
+            "unit_size": "48 x 96 in (4x8) sheet",
             "total_purchased_length": 0.0,
             "total_purchased_weight": round(grating_wt, 1),
-            "notes": f"Gross requirement: {grating_gross_sq_ft:.1f} sq ft (includes 15% cut/drop allowance)."
+            "notes": f"Buy {grating_sheets} full 4x8 sheet(s). The carrier uses "
+                     f"about {grating_net_sq_in / 144.0:.1f} sq ft."
         })
 
     # Bought-Out Commercial Hardware Schedule
     hardware_items = [
-        ("3/4\" Heavy Flat Washers (Pack of 2) & 3/16\" Linchpins (Pack of 2)", "Grade 5 Zinc", 1, "Pair", 0.5, "For 3/4\" ramp hinge pin P1 retention"),
-        ("5/8\" Heavy-Duty Hitch Receiver Pins with Hairpin Clips", "Grade 5 / Grade 8 Zinc", 2, "Each", 1.8, "For dual stinger truck receiver attachment"),
-        ("1/2\" Anchor Bow Shackle (Grade 70, 2-Ton WLL)", "Forged Alloy Steel", 1, "Each", 0.8, "For front chain tie-down bracket G4"),
-        ("6\" Oval Flush-Mount LED Stop/Turn/Tail Lamps with Grommets & Pigtails", "DOT / SAE Compliant", 2, "Pair", 1.4, "For recessed rear light guard boxes G2")
+        ("Hairpin clips for the 3/4 in hinge pin, plus 3/4 in flat washers",
+         "Zinc plated", 1, "pair of each", 0.5,
+         "Retains the ramp hinge pin P1 - one at each end"),
+        ("5/8 in hitch pins with clips (use the truck's own if they fit)",
+         "Grade 5 / Grade 8 zinc", 2, "each", 1.8,
+         "Pins the two mounting tubes into the truck sockets"),
+        ("1/2 in anchor shackle, 2 ton",
+         "Forged alloy", 1, "each", 0.8,
+         "Front chain tie-down bracket G4 - this is the main restraint"),
+        ("6 in oval LED stop/turn/tail lamps with grommets and pigtails",
+         "DOT / SAE", 2, "pair", 1.4,
+         "Recessed in the rear light guards G2"),
+        ("Grade 70 transport chain and binder",
+         "Grade 70", 1, "set", 12.0,
+         "Front restraint for the machine"),
     ]
-    for name, grd, qty, unit, wt, note in hardware_items:
-        purchase_rows.append({
-            "category": "HARDWARE",
-            "section": name,
-            "grade": grd,
-            "stick_length": 0.0,
-            "quantity": qty,
-            "unit_size": unit,
-            "total_purchased_length": 0.0,
-            "total_purchased_weight": wt,
-            "notes": note
-        })
-
     total_purchased_wt = sum(r["total_purchased_weight"] for r in purchase_rows)
     total_cut_wt = total_linear_cut_wt
     overall_eff = (total_linear_cut_wt / total_linear_purchased_wt * 100.0) if total_linear_purchased_wt > 0 else 0.0

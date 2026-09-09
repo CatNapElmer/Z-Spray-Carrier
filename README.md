@@ -1,104 +1,150 @@
 # Z Spray Carrier Fabricator
 
-A professional parametric steel fabrication and shop-drawing application engineered for mounting a **2026 Z-Spray Junior (Model ZSX3624)** behind a **2015 Ford F-350 flatbed** via twin Class V receivers.
+Generates a shop pack for a welded steel carrier that hauls a **Z-Spray Junior**
+on the back of a truck, hanging off the **two receiver sockets the truck already
+has**.
+
+The truck is finished and does not get modified. Nothing braces to the flatbed,
+the headache rack or anything else. The carrier mounts through those two sockets
+and that is it.
+
+This is a tape-measure-and-welder job. The software exists to make it faster than
+Kentucky windage, not to turn it into a precision engineering exercise.
 
 ---
 
-## 🛠️ Overview & Purpose
+## What gets built
 
-This program is built specifically for structural steel fitters and fabricators. Rather than being a decorative 3D viewer, it operates as a full parametric CAD and engineering drafting engine that outputs complete, fabrication-ready shop packages from exact baseline datums ($X=0$ front carrier datum, $Y=0$ vehicle centerline, $Z=0$ deck running surface).
+| | |
+|---|---|
+| Deck frame | 63" long, 36" outside the side rails, about 17-1/4" off the ground |
+| Usable width | 38" across the deck, ramp and guides (measured off the steel, not assumed) |
+| Ramp | one rigid 61" assembly, swings from the ground to straight up |
+| Wheel tracks | 11-1/2" each for an 8.5" rear tire, 13" open down the middle |
+| Truck mount | two 2x2x1/4 tubes into the existing sockets, sleeved with 2-1/2x2-1/2x3/16 outside the socket |
+| Load path | three under-deck mount beams cut to fit between the tubes, welded flat to the rails and cross tubes |
+| Hinge | one 3/4" pin, seven 1-1/4" OD barrels alternating carrier / ramp, no ears, nothing machined |
+| Securement | front chain and shackle |
 
-### Critical Engineering Specs
-- **Carrier Footprint:** 38.00" outer width × 63.00" deck length.
-- **Ramp Design:** Single rigid 61.00" ramp assembly with single hinge axis at $X=63.00"$. Zero intermediate folding joints.
-- **Wheel Tracks:** Dual 12.00" flat wheel tracks with 14.00" open central cleanout gap.
-- **Flared Guides:** Integrated 3.00" vertical guides with 1.50" 45° outward top flares.
-- **Truck Mounts:** Twin $2\times 2\times 1/4"$ square tube stingers spaced at 38.00" center-to-center (40.00" outside-to-outside).
-- **Material Selection:** ASTM A500 Grade B structural tubing ($2\times 2\times 3/16"$ & $2\times 2\times 1/4"$), ASTM A36 angle iron ($2\times 2\times 3/16"$), A36 plate gussets ($1/4"$ & $3/8"$), ASTM A513 DOM hinge barrels, and 1018 cold-finish 3/4" hinge pin.
-- **Structural Safety Factor:** 3.86 (Bending stress: 11,922 psi vs. 46,000 psi yield).
-- **Dead Weight:** ~317 lbs carrier dead weight (~1,465 lbs total vehicle suspended mass with machine, full liquid, and full granular fertilizer).
+### The hinge, in one line
 
----
+**The gap between the deck and the ramp is one barrel diameter.** Lay a scrap of
+the barrel stock in the gap and that is your spacer. Each barrel sits in the
+corner of its own cross tube — bottom flush with the top of the frame, back
+against the cross tube face — and gets a fillet above and below. Slide all seven
+onto the pin, clamp, tack, swing it by hand, then weld it out.
 
-## 📐 9-Sheet Vector Shop Drawing Set (`Z-Spray-Carrier-Shop-Drawings.pdf`)
-
-The generated vector drawing set is strictly drafted to ANSI/AWS structural steel fabrication standards on US Letter Landscape ($8.5\times 11"$) with baseline dimensions from datum $X=0$:
-
-1. **Sheet S1: General Arrangement** - Plan view, side elevation, upright transport (90°), and deployed slope profile (16.2°).
-2. **Sheet S2: Main Carrier Weldment (Plan View & Fitter Datums)** - Absolute baseline dimensions from $X=0$ for crossmembers C1 ($1"$), C2 ($18"$), C3 ($38"$), C4 ($62"$), and overall deck ($63"$).
-3. **Sheet S3: Main Carrier Weldment (Elevation & Sections)** - Full elevation and Section A-A showing formed 45° flared guide, grating shelf, and underframe stinger lap.
-4. **Sheet S4: Twin Receiver Mounts & Stingers** - 38" c-c twin interface, 18" provisional stinger insertion, 3" pin hole setback, and stinger gusset G1 details.
-5. **Sheet S5: Ramp Weldment (Plan View)** - Single rigid ramp assembly, baseline dimensions from hinge line for RC1–RC5 crossmembers, and beveled approach plate RF1.
-6. **Sheet S6: Ramp Elevation & Hinge Detail** - 90° upright transport envelope, 16.2° ground slope, and enlarged Detail B with DOM sleeve and 3/4" pin P1.
-7. **Sheet S7: Individual Fabricated Parts** - Gussets G1, light guards G2 with 6.75"×2.50" oval cutouts, hinge ears G3, chain tie-down G4, wheel stops G5.
-8. **Sheet S8: Material Schedule & BOM** - Complete piece schedule with mark, size, cut length, quantity, ASTM grade, and individual/total weights.
-9. **Sheet S9: Stock Cutting Plan & Purchasing Optimization** - 1D linear cutting layout diagrams by stick (20-ft and 24-ft multi-length nesting, 0.125" kerf), scrap %, yield %, and raw steel order schedule.
+The bore is 7/8" on a 3/4" pin. That 1/8" of slop is on purpose: it swings freely
+and never needs reaming after welding.
 
 ---
 
-## ⚠️ Provenance & Unverified Field Measurement Warnings
+## Field fit — not drawing dimensions
 
-All dimensions in the system carry explicit provenance metadata (`derived`, `standard`, `assumed`, `field_measured`, `unverified`). 
+The truck is the fixture. These are settled on the truck or with the machine, and
+the shop pack says so instead of printing a number:
 
-The following items are provisional design values that **must be field-confirmed** on the 2015 Ford F-350 before cutting steel:
-- **`stinger_insertion_length` (18.00"):** Measure internal receiver obstruction depth from receiver face to truck underbed obstructions.
-- **`hitch_pin_hole_setback` (3.00"):** Measure distance from receiver face to centerline of the 5/8" hitch pin hole.
-- **`ground_clearance` / `deck_height` (17.00"):** Confirm loaded truck bed/receiver height to verify deployed ramp angle.
+- **Mounting tube spacing** — FIELD FIT TO TRUCK. Slide both tubes into the
+  sockets; the spacing sets itself. No socket measurement, no centreline
+  calculation.
+- **Hitch pin holes** — TRANSFER PIN HOLES FROM TRUCK.
+- **Mount beam lengths (MB1/2/3)** — CUT TO FIT between the mounting tubes.
+- **Sleeve position** — slide up against the socket face.
+- **Ramp / rear tire gap** — CHECK DURING MACHINE FIT-UP.
+- **Machine body clearance past the guides** — CHECK DURING MACHINE FIT-UP. The
+  guides guide the tires; the published 36" body width is measured well above a
+  3" guide and is not a gate on the design.
 
----
-
-## 💻 Local Application Architecture
-
-- **Backend:** Python 3.12+ / FastAPI / ReportLab vector CAD canvas / Pytest
-  - `geometry.py`: 3D parametric fabrication assembly model with material library and structural checks.
-  - `optimizer.py`: 1D linear stock optimizer supporting multi-length raw stock and kerf modeling.
-  - `drawings.py`: 9-sheet vector CAD drafting engine with architectural ticks, balloons, title blocks, and datum dimension chains.
-  - `main.py`: REST API endpoints and ZIP fabrication package exporter.
-- **Frontend:** React 19 / TypeScript / Vite / CSS Grid
-  - 12 comprehensive parameter & fabrication panels: Project, Carrier, Tracks, Ramp, Truck Mounts, Machine & Loads, Materials, BOM, Cut List, Stock Plan, Shop Drawings, Warnings.
-  - Interactive orthographic 2D SVG Plan & Elevation preview with live parametric dimension updates.
-  - Provenance status indicators, parameter reset/load/save, and direct package export.
+Internally the program keeps one nominal spacing coordinate so it can draw the
+model. It is tagged `MODEL_ONLY` and never reaches paper as a dimension — there
+is a test that fails if it does.
 
 ---
 
-## 🚀 Running the Application
+## What the program checks
 
-### Prerequisites
-- Windows 10/11
-- Python 3.12+ (in PATH)
-- Node.js 18+ (in PATH)
+`physical.py` works on the real outside size of every piece of steel. A note
+saying two parts are welded proves nothing; only steel in the same place counts.
 
-### Quick Start
-Run from PowerShell in the project root:
+It answers one question: **did we design pieces that do not connect, or cannot
+move?**
+
+- every declared weld is backed by real contact (gap, graze, face contact,
+  tangent fillet or interference)
+- nothing occupies the same space unintentionally — sleeves over tubes are
+  `NESTED_FIT`, coped joints are `FIT_REQUIRED`, neither is a failure
+- the ramp swings from deployed through straight up without hitting anything
+- usable width is measured across the deck / ramp / guides; the under-truck
+  mounting tubes are reported separately and are not held to that target
+- the tracks take the tire
+
+It does not model weld beads or grinder chamfers, and it does not report ordinary
+fit-up as a catastrophe.
+
+### Strength
+
+Kept deliberately simple. The whole carrier hangs off two tubes, so the bending
+at the socket is just weight × how far back it sits, split between two tubes.
+Checked against a rough-road bump, a hard stop and a hard corner.
+
+Acceptance rule: **nothing yields at 2 g.** That is a factor of 2 against yield on
+the static load. No second safety factor is stacked on top of an already-factored
+load — that would be a 4 g bar and would make this carrier absurdly heavy.
+
+The bare 2x2 tube would yield around 1.4 g, which is why the slip-on sleeve is
+there. Sleeved, nothing yields below about 3 g. **The sleeves are structural — do
+not leave them off.**
+
+---
+
+## Shop pack
+
+`POST /api/export` (or the Export button) writes:
+
+- `Z-Spray-Carrier-Shop-Drawings.pdf` — 9 sheets
+- `README-FOR-FABRICATOR.txt` — build order, field-fit items, hinge notes, the
+  fit-up and strength results
+- `BOM.csv`, `Cut-List.csv` — every piece in the model, with field-fit pieces
+  marked `CUT TO FIT - APPROX.` rather than pretending to be production lengths
+- `Purchase-List.csv` — what to buy. If the job needs a full sheet, the row is a
+  full sheet at the full sheet's weight
+- `Stock-Cutting-Plan.pdf`, `Project-Parameters.pdf`
+- all of it zipped
+
+---
+
+## Running it
+
+Windows 10/11, Python 3.12+, Node 18+.
+
 ```powershell
 .\Start-ZSprayCarrier.ps1
 ```
-This starts:
-- FastAPI Backend: `http://localhost:8000`
-- Interactive Frontend: `http://localhost:5173`
 
-### Running Automated Tests
-Run the comprehensive test suite:
+Backend on `http://localhost:8000`, frontend on `http://localhost:5173`.
+
+Tests:
+
 ```powershell
 .\Test-ZSprayCarrier.ps1
 ```
-Or directly via Python:
+
+or
+
 ```powershell
 cd backend
-.\.venv\Scripts\pytest test_app.py
+.\.venv\Scripts\pytest -q
 ```
-*(35 test cases verifying geometry, baseline dimensions, BOM weights, stock optimization, and drawing layout)*
 
 ---
 
-## 📦 Exported Fabrication Package
+## Layout
 
-When generating an export package (via the GUI or `/api/export`), the program produces:
-- `Z-Spray-Carrier-Shop-Drawings.pdf` (Complete 9-sheet vector CAD set)
-- `BOM.csv` (Bill of materials piece schedule)
-- `Cut-List.csv` (Cut lengths, angles, miters, piece marks)
-- `Purchase-List.csv` (Raw stick order list)
-- `Stock-Cutting-Plan.pdf` (1D linear nesting diagrams)
-- `Project-Parameters.pdf` (Engineering parameter & provenance schedule)
-- `README-FOR-FABRICATOR.txt` (Critical field measurement warnings & fitter instructions)
-- `Z-Spray-Carrier-Fabrication-Package.zip` (All files bundled)
+- `backend/models.py` — parameters and result types
+- `backend/geometry.py` — the actual carrier: members, plates, holes, welds,
+  hinge layout, build sequence, strength check
+- `backend/physical.py` — does it fit together and does the ramp swing
+- `backend/optimizer.py` — cut nesting and the buy list
+- `backend/drawings.py` — the drawing sheets
+- `backend/main.py` — API and package export
+- `frontend/` — React parameter UI and preview
