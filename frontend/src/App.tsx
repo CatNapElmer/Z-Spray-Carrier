@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { apiFetch } from './api'
 import { apiUrl } from './config'
+import BuyList from './BuyList'
 const DEFAULT_PARAMS: Record<string, any> = {
   carrier_max_overall_width: 38, carrier_width: 36, carrier_deck_length: 63, deck_height: 17.25,
   track_flat_width: 11.5, track_outer_spacing: 36, track_center_gap: 13, flared_guide_height: 3,
@@ -55,8 +56,10 @@ function App() {
   const [assembly, setAssembly] = useState<any>(null)
   const [stockPlan, setStockPlan] = useState<any>(null)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [downloadingPurchaseList, setDownloadingPurchaseList] = useState(false)
   const [sheet, setSheet] = useState(1)
   const [previewVersion, setPreviewVersion] = useState(0)
   const [search, setSearch] = useState('')
@@ -64,13 +67,28 @@ function App() {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
+      setLoading(true)
+      setStockPlan(null)
       try {
         const options = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) }
         const [g, o] = await Promise.all([apiFetch('geometry', options), apiFetch('optimizer', options)])
-        if (!g.ok || !o.ok) throw new Error('The fabrication data could not be generated.')
+        if (!g.ok) throw new Error(`Geometry request failed (${g.status}).`)
+        if (!o.ok) throw new Error(`Material optimizer request failed (${o.status}).`)
         const [geometry, optimizer] = await Promise.all([g.json(), o.json()])
+        if (!optimizer || !Array.isArray(optimizer.purchase_list)) {
+          throw new Error('Material optimizer response is missing purchase_list.')
+        }
+        if (optimizer.purchase_list.length === 0) {
+          throw new Error('Material optimizer returned an empty purchase_list.')
+        }
         if (!cancelled) { setAssembly(geometry); setStockPlan(optimizer); setError('') }
-      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : 'The backend is not available.') }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'The backend is not available.'
+        console.error('Fabrication data request failed', { message, optimizerUrl: apiUrl('optimizer') })
+        if (!cancelled) setError(message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     void load()
     return () => { cancelled = true }
@@ -98,6 +116,22 @@ function App() {
       setPreviewVersion(Date.now())
     } catch { window.alert('The shop pack could not be exported. Check the backend server and try again.') }
     finally { setExporting(false) }
+  }
+  const downloadPurchaseList = async () => {
+    setDownloadingPurchaseList(true)
+    try {
+      const response = await apiFetch('purchase-list.csv', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+      })
+      if (!response.ok) throw new Error(`Material list download failed (${response.status}).`)
+      const url = URL.createObjectURL(await response.blob()), anchor = document.createElement('a')
+      anchor.href = url; anchor.download = 'Purchase-List.csv'; document.body.appendChild(anchor); anchor.click(); anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Material list download failed.'
+      console.error('Purchase list download failed', { message, url: apiUrl('purchase-list.csv') })
+      window.alert(`${message} Check the backend connection and try again.`)
+    } finally { setDownloadingPurchaseList(false) }
   }
   const save = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(params, null, 2)], { type: 'application/json' })), a = document.createElement('a')
@@ -162,7 +196,9 @@ function App() {
         {cutView === 'PIECE' ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Mark</th><th>Qty</th><th>Material / section</th><th>Cut length</th><th>Essential preparation</th></tr></thead><tbody>{(assembly?.cut_list || []).map((x: any) => <tr key={x.piece_mark} className={fieldFit(x) ? 'field-fit-row' : ''}><td><span className="mark-badge">{x.piece_mark}</span>{fieldFit(x) && <span className="fit-label">CUT TO FIT — APPROX.</span>}</td><td className="quantity-cell">{x.quantity}</td><td>{x.section}</td><td className="cut-length">{fraction(x.cut_length)}</td><td>{prep(x)}</td></tr>)}</tbody></table></div> : <div className="sticks-container">{(stockPlan?.stock_plan || []).map((s: any) => <article className="stick-card" key={s.stick_id}><h3>{s.stick_id} — {s.section} — {s.stock_length / 12} ft stick</h3><div className="stock-cut-label">CUT:</div><ol className="stock-cut-list">{s.parts.map((p: any, i: number) => <li key={`${p.piece_mark}-${i}`} className={fieldFit(p) ? 'stock-field-fit' : ''}><strong>{p.piece_mark}</strong> — {fraction(p.length)} {fieldFit(p) && <span>CUT TO FIT — APPROX.</span>}</li>)}</ol><p className="stock-leftover">LEFT OVER: {fraction(s.scrap_remaining)}</p></article>)}</div>}
       </section>}
 
-      {tab === 'BUY' && <section className="panel"><h2>Buy List</h2><p className="lead">Material and hardware required for this carrier.</p><div className="table-scroll"><table className="data-table buy-table"><thead><tr><th>Material / hardware</th><th>Specification</th><th>Purchase size</th><th>Qty</th></tr></thead><tbody>{(stockPlan?.purchase_list || []).map((x: any, i: number) => <tr key={`${x.section}-${i}`}><td><strong>{x.section}</strong></td><td>{x.grade}</td><td>{x.stick_length ? `${x.stick_length / 12} ft` : x.unit_size}</td><td className="quantity-cell">{x.quantity}</td></tr>)}</tbody></table></div></section>}
+      {tab === 'BUY' && <BuyList rows={stockPlan?.purchase_list || null}
+        totalWeight={stockPlan?.total_purchased_weight || 0} loading={loading} error={error}
+        downloading={downloadingPurchaseList} onDownload={() => void downloadPurchaseList()} />}
 
       {tab === 'DRAWINGS' && <section className="panel"><div className="panel-heading"><div><h2>Drawings</h2><p>Select a sheet to see the latest generated preview.</p></div><button className="btn btn-primary" onClick={() => void exportPack()}>Export Shop Pack</button></div><div className="sheet-selector">{SHEETS.map((title, i) => <button key={title} className={sheet === i + 1 ? 'selected' : ''} onClick={() => setSheet(i + 1)}><strong>S{i + 1}</strong><span>{title}</span></button>)}</div><h3 className="drawing-title">S{sheet} — {SHEETS[sheet - 1]}</h3><div className="drawing-preview"><img src={`${apiUrl(`drawings/preview/${sheet}`)}?v=${previewVersion}`} alt={`Shop drawing S${sheet}: ${SHEETS[sheet - 1]}`} /></div></section>}
     </main>

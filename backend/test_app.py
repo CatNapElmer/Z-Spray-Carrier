@@ -10,6 +10,8 @@ They deliberately do NOT test conditions a fabricator settles with a grinder.
 """
 
 import os
+import csv
+import io
 import zipfile
 import pytest
 from fastapi.testclient import TestClient
@@ -100,6 +102,75 @@ def test_api_optimizer_endpoint():
     body = r.json()
     assert body["stock_plan"]
     assert body["purchase_list"]
+
+
+def test_default_purchase_list_is_complete_and_commercially_purchasable():
+    params = ProjectParameters()
+    body = client.post("/api/optimizer", json={}).json()
+    rows = body["purchase_list"]
+    sections = {row["section"] for row in rows}
+    categories = {row["category"] for row in rows}
+
+    assert {"LINEAR_STOCK", "PLATE", "GRATING", "HARDWARE"} <= categories
+    assert params.stinger_section in sections
+    assert params.stinger_sleeve_section in sections
+    assert "3/4 Round Bar" in sections
+    assert "1.25x0.188 DOM Tube" in sections
+    assert any("hairpin" in section.lower() for section in sections)
+    assert any("washer" in section.lower() for section in sections)
+    assert any("hitch pin" in section.lower() for section in sections)
+    assert any("shackle" in section.lower() for section in sections)
+    assert any("LED" in section for section in sections)
+    assert any("chain" in section.lower() and "binder" in section.lower()
+               for section in sections)
+
+    for row in rows:
+        assert isinstance(row["quantity"], int)
+        assert row["quantity"] > 0
+        if row["category"] == "LINEAR_STOCK":
+            assert row["stick_length"] in params.available_stock_lengths
+            assert row["total_purchased_length"] == pytest.approx(
+                row["stick_length"] * row["quantity"])
+
+
+def test_plate_purchase_blank_fits_the_ramp_transition_plate():
+    rows = client.post("/api/optimizer", json={}).json()["purchase_list"]
+    quarter = next(row for row in rows
+                   if row["category"] == "PLATE" and row["section"].startswith("0.25"))
+    assert quarter["unit_size"].startswith("24 x 48 in")
+
+
+def test_hardware_schedule_is_tied_to_real_carrier_piece_marks():
+    assembly = _assembly()
+    marks = {row["piece_mark"] for row in assembly["bom"]}
+    assert assembly["hardware"]
+    for item in assembly["hardware"]:
+        assert item["related_piece_marks"]
+        assert set(item["related_piece_marks"]) <= marks
+
+
+def test_purchase_list_changes_when_material_usage_changes():
+    default_rows = client.post("/api/optimizer", json={}).json()["purchase_list"]
+    larger_rows = client.post("/api/optimizer", json={
+        "stinger_sleeve_length": 130.0,
+    }).json()["purchase_list"]
+    default_length = sum(row["total_purchased_length"] for row in default_rows
+                         if row["section"] == "2.5x2.5x3/16 Tube")
+    larger_length = sum(row["total_purchased_length"] for row in larger_rows
+                        if row["section"] == "2.5x2.5x3/16 Tube")
+    assert larger_rows != default_rows
+    assert larger_length > default_length
+
+
+def test_direct_purchase_list_csv_download_contains_real_rows():
+    response = client.post("/api/purchase-list.csv", json={})
+    assert response.status_code == 200
+    assert "Purchase-List.csv" in response.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert len(rows) > 1
+    assert {"LINEAR_STOCK", "PLATE", "GRATING", "HARDWARE"} <= {
+        row["category"] for row in rows
+    }
 
 
 def test_geometry_checks_are_exposed_over_the_api():
@@ -689,6 +760,11 @@ def test_export_package_contains_everything_the_shop_needs():
                          "Z-Spray-Carrier-Shop-Drawings.pdf"):
             assert expected in names
         readme = zf.read("README-FOR-FABRICATOR.txt").decode("utf-8")
+        purchase_rows = list(csv.DictReader(io.StringIO(
+            zf.read("Purchase-List.csv").decode("utf-8"))))
+    assert len(purchase_rows) > 1
+    assert any(row["category"] == "LINEAR_STOCK" for row in purchase_rows)
+    assert any(row["category"] == "HARDWARE" for row in purchase_rows)
     assert "FIELD FIT TO TRUCK" in readme
     assert "CHECK RAMP SWING BEFORE FINAL WELD" in readme
     assert "BUILD ORDER" in readme

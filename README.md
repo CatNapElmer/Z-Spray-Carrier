@@ -21,6 +21,11 @@ Every push to `main` runs the backend tests, builds the production frontend, and
 deploys it through `.github/workflows/deploy-pages.yml`. Render follows the same
 branch and rebuilds the backend container from `Dockerfile` using `render.yaml`.
 
+The app's **Buy List** is the authoritative procurement view: optimized full
+steel sticks, plate, expanded metal and bought-out hardware. **Download Material
+List** saves those same rows directly as `Purchase-List.csv`; the full Shop Pack
+contains the identical CSV.
+
 [Deploy the backend to Render](https://render.com/deploy?repo=https://github.com/CatNapElmer/Z-Spray-Carrier)
 
 Production configuration:

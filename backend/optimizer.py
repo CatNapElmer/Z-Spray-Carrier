@@ -24,12 +24,15 @@ def optimize_stock(
     if isinstance(assembly_or_cuts, dict):
         cut_list = assembly_or_cuts.get("cut_list", [])
         plates = assembly_or_cuts.get("plates", [])
+        hardware = assembly_or_cuts.get("hardware", [])
     elif isinstance(assembly_or_cuts, list):
         cut_list = assembly_or_cuts
         plates = []
+        hardware = []
     else:
         cut_list = []
         plates = []
+        hardware = []
     
     # -------------------------------------------------------------
     # 1. LINEAR STOCK 1D NESTING
@@ -169,7 +172,7 @@ def optimize_stock(
                 })
 
     # Plate items grouped by thickness and grade
-    plate_groups: Dict[Tuple[float, str], float] = {}
+    plate_groups: Dict[Tuple[float, str], Dict[str, Any]] = {}
     for p in plates:
         mat = _get(p, "material", "")
         if "Expanded Metal" in mat:
@@ -181,27 +184,38 @@ def optimize_stock(
         qty = int(_get(p, "quantity", 1))
         area = w * l * qty
         key = (thk, grd)
-        plate_groups[key] = plate_groups.get(key, 0.0) + area
+        group = plate_groups.setdefault(key, {"area": 0.0, "parts": []})
+        group["area"] += area
+        group["parts"].extend([(w, l)] * qty)
         
-    for (thk, grd), net_sq_in in plate_groups.items():
+    plate_sizes = [(24.0, 24.0), (24.0, 48.0), (48.0, 96.0),
+                   (48.0, 120.0), (48.0, 144.0)]
+    for (thk, grd), group in plate_groups.items():
+        net_sq_in = group["area"]
         gross_sq_in = net_sq_in * 1.20   # 20% for shear kerf and drop
-        gross_sq_ft = gross_sq_in / 144.0
 
-        # Report what you actually BUY, not what ends up in the carrier. If the
-        # job needs a full sheet, the purchase row is a full sheet and the
-        # weight is the full sheet's weight.
-        if gross_sq_ft <= 4.0:
-            unit_desc = f"24 x 24 in x {thk} in plate drop"
-            sheet_sq_ft = 4.0
-        elif gross_sq_ft <= 8.0:
-            unit_desc = f"24 x 48 in x {thk} in plate drop"
-            sheet_sq_ft = 8.0
-        else:
-            unit_desc = f"48 x 96 in (4x8) x {thk} in steel plate sheet"
-            sheet_sq_ft = 32.0
-        sheets_needed = max(1, math.ceil(gross_sq_ft / sheet_sq_ft))
-        purchased_sq_in = sheets_needed * sheet_sq_ft * 144.0
+        # A purchase blank must fit every individual part, not merely have
+        # enough total area. This matters for narrow pieces such as RF1 (3x36),
+        # which cannot come out of a 24x24 drop.
+        fitting_sizes = [
+            (sw, sl) for sw, sl in plate_sizes
+            if all((w <= sw and l <= sl) or (w <= sl and l <= sw)
+                   for w, l in group["parts"])
+        ]
+        if not fitting_sizes:
+            largest = max(max(w, l) for w, l in group["parts"])
+            raise ValueError(
+                f"No commercial plate size configured for a {largest:g} in long, "
+                f"{thk:g} in thick part."
+            )
+        sheet_w, sheet_l = fitting_sizes[0]
+        sheet_sq_in = sheet_w * sheet_l
+        sheets_needed = max(1, math.ceil(gross_sq_in / sheet_sq_in))
+        purchased_sq_in = sheets_needed * sheet_sq_in
         purchased_wt = purchased_sq_in * thk * 0.2836
+        feet_desc = " (4x8)" if (sheet_w, sheet_l) == (48.0, 96.0) else ""
+        unit_desc = (f"{sheet_w:g} x {sheet_l:g} in{feet_desc} x {thk:g} in "
+                     "steel plate")
 
         purchase_rows.append({
             "category": "PLATE",
@@ -244,35 +258,21 @@ def optimize_stock(
                      f"about {grating_net_sq_in / 144.0:.1f} sq ft."
         })
 
-    # Bought-Out Commercial Hardware Schedule
-    hardware_items = [
-        ("Hairpin clips for the 3/4 in hinge pin, plus 3/4 in flat washers",
-         "Zinc plated", 1, "pair of each", 0.5,
-         "Retains the ramp hinge pin P1 - one at each end"),
-        ("5/8 in hitch pins with clips (use the truck's own if they fit)",
-         "Grade 5 / Grade 8 zinc", 2, "each", 1.8,
-         "Pins the two mounting tubes into the truck sockets"),
-        ("1/2 in anchor shackle, 2 ton",
-         "Forged alloy", 1, "each", 0.8,
-         "Front chain tie-down bracket G4 - this is the main restraint"),
-        ("6 in oval LED stop/turn/tail lamps with grommets and pigtails",
-         "DOT / SAE", 2, "pair", 1.4,
-         "Recessed in the rear light guards G2"),
-        ("Grade 70 transport chain and binder",
-         "Grade 70", 1, "set", 12.0,
-         "Front restraint for the machine"),
-    ]
-    for name, grd, qty, unit, wt, note in hardware_items:
+    # Bought-out hardware comes from the current carrier assembly. This keeps
+    # procurement synchronized with the physical pieces that require it.
+    for item in hardware:
+        qty = int(_get(item, "quantity", 1))
+        unit_wt = float(_get(item, "unit_weight", 0.0))
         purchase_rows.append({
             "category": "HARDWARE",
-            "section": name,
-            "grade": grd,
+            "section": _get(item, "section", "Bought-out hardware"),
+            "grade": _get(item, "grade", ""),
             "stick_length": 0.0,
             "quantity": qty,
-            "unit_size": unit,
+            "unit_size": _get(item, "unit_size", "each"),
             "total_purchased_length": 0.0,
-            "total_purchased_weight": wt,
-            "notes": note
+            "total_purchased_weight": round(unit_wt * qty, 1),
+            "notes": _get(item, "notes", ""),
         })
 
     total_purchased_wt = sum(r["total_purchased_weight"] for r in purchase_rows)

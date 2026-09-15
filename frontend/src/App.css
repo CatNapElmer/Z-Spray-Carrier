@@ -40,7 +40,18 @@ button,input,select { font:inherit; } button { cursor:pointer; }
 .sticks-container { display:grid; gap:18px; } .stick-card { padding:22px 26px; border:2px solid var(--line); } .stick-card h3 { margin:0; font-size:20px; }
 .stock-cut-label { margin-top:18px; font-weight:900; } .stock-cut-list { margin:7px 0 12px; padding-left:30px; font-size:18px; line-height:1.8; }
 .stock-field-fit { padding:3px 7px; background:var(--amber); border-left:5px solid var(--amber-line); } .stock-field-fit span { margin-left:8px; color:#6b4200; font-size:13px; font-weight:900; }
-.stock-leftover { margin:0; color:#980019; font-size:18px; font-weight:900; } .buy-table { min-width:720px; }
+.stock-leftover { margin:0; color:#980019; font-size:18px; font-weight:900; }
+.buy-heading { align-items:center; } .buy-heading p { max-width:760px; margin:8px 0 0; color:var(--muted); font-size:18px; }
+.purchase-summary { display:grid; grid-template-columns:repeat(5,minmax(150px,1fr)); gap:10px; margin:18px 0 22px; }
+.purchase-summary div { padding:15px; background:#eef2f4; border-left:5px solid var(--steel); }
+.purchase-summary span { display:block; color:var(--muted); font-size:13px; font-weight:900; text-transform:uppercase; }
+.purchase-summary strong { display:block; margin-top:3px; font-size:25px; }
+.buy-table { min-width:1320px; } .buy-table td:nth-child(4),.buy-table td:nth-child(6),.buy-table td:nth-child(7) { white-space:nowrap; }
+.category-badge { display:inline-block; padding:5px 8px; background:#e1e7ea; font-size:13px; font-weight:900; white-space:nowrap; text-transform:uppercase; }
+.category-linear_stock { color:#fff; background:#3e4b54; } .category-plate { color:#5b3700; background:#ffe1a3; }
+.category-grating { color:#00475b; background:#cceef4; } .category-hardware { color:#5c1230; background:#f5d5e2; }
+.buy-status,.buy-error { display:grid; gap:5px; padding:20px; border:2px solid var(--line); font-size:18px; }
+.buy-error { color:#690010; background:#ffe8ec; border:3px solid var(--red); }
 .sheet-selector { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:24px; }
 .sheet-selector button { display:flex; gap:10px; align-items:center; min-height:58px; padding:10px 14px; border:2px solid var(--line); background:#fff; text-align:left; }
 .sheet-selector button.selected { border-color:var(--red); background:#fff0f3; } .sheet-selector strong { font-size:20px; } .sheet-selector span { color:var(--muted); }
@@ -70,4 +81,11 @@ button,input,select { font:inherit; } button { cursor:pointer; }
   .orientation { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin-right:14px; padding-inline:12px; font-size:13px; }
   .orientation span:last-child { text-align:right; }
   .action-row { flex-direction:column; align-items:stretch; }
+  .purchase-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .purchase-summary div:last-child { grid-column:1/-1; }
+  .buy-table-wrap { overflow:visible; border:0; } .buy-table { min-width:0; } .buy-table thead { display:none; }
+  .buy-table,.buy-table tbody,.buy-table tr,.buy-table td { display:block; width:100%; }
+  .buy-table tr { margin-bottom:16px; padding:12px 14px; background:#fff !important; border:2px solid var(--line); }
+  .buy-table td { display:grid; grid-template-columns:minmax(112px,38%) minmax(0,1fr); gap:10px; padding:9px 0; border-bottom:1px solid #e2e6e8; overflow-wrap:anywhere; }
+  .buy-table td::before { content:attr(data-label); color:var(--muted); font-size:12px; font-weight:900; text-transform:uppercase; }
+  .buy-table td:last-child { border:0; } .buy-table td.quantity-cell { text-align:left; font-size:18px; }
 }

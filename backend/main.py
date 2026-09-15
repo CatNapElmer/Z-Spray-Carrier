@@ -1,5 +1,6 @@
 import os
 import csv
+import io
 import zipfile
 import shutil
 import subprocess
@@ -7,7 +8,7 @@ import threading
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib import colors
@@ -36,6 +37,23 @@ app.add_middleware(
 )
 
 preview_generation_lock = threading.Lock()
+
+PURCHASE_LIST_FIELDS = [
+    "category", "section", "grade", "stick_length", "quantity", "unit_size",
+    "total_purchased_length", "total_purchased_weight", "notes",
+]
+
+
+def purchase_list_csv(stock_data: Dict[str, Any]) -> str:
+    """Serialize the optimizer's authoritative procurement rows."""
+    rows = stock_data.get("purchase_list")
+    if not rows:
+        raise ValueError("Optimizer returned no purchase_list rows.")
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=PURCHASE_LIST_FIELDS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
 
 @app.get("/api/health")
 def health_check():
@@ -116,7 +134,32 @@ def get_geometry_checks(params: ProjectParameters):
 @app.post("/api/optimizer")
 def get_stock_optimization(params: ProjectParameters):
     assembly = generate_fabrication_assembly(params)
-    return optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
+    stock_data = optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
+    if not stock_data.get("purchase_list"):
+        raise HTTPException(
+            status_code=500,
+            detail="The optimizer produced no material purchasing rows.",
+        )
+    return stock_data
+
+
+@app.post("/api/purchase-list.csv")
+def download_purchase_list(params: ProjectParameters):
+    """Download the same purchase list used by the UI and full Shop Pack."""
+    assembly = generate_fabrication_assembly(params)
+    stock_data = optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
+    try:
+        content = purchase_list_csv(stock_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="Purchase-List.csv"',
+            "Cache-Control": "no-store, max-age=0",
+        },
+    )
 
 @app.post("/api/export")
 def export_package(params: ProjectParameters):
@@ -194,12 +237,7 @@ def export_package(params: ProjectParameters):
     # 6. Purchase List CSV
     purch_path = os.path.join(output_dir, "Purchase-List.csv")
     with open(purch_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["category", "section", "grade", "stick_length", "quantity", "unit_size", "total_purchased_length", "total_purchased_weight", "notes"]
-        )
-        writer.writeheader()
-        writer.writerows(stock_data["purchase_list"])
+        f.write(purchase_list_csv(stock_data))
         
     # 7. README-FOR-FABRICATOR.txt
     field_fit_items = [v for v in provenance.values()

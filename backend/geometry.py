@@ -168,6 +168,71 @@ def section_outside_dims(section: str) -> Tuple[float, float]:
     return (t, t)
 
 
+def bought_out_hardware() -> List[Dict[str, Any]]:
+    """Hardware required by the physical carrier parts in this assembly.
+
+    Keeping this schedule beside the geometry that creates P1, S1, G2 and G4
+    makes the purchase list follow the current design instead of maintaining a
+    second, disconnected hardware list in the stock optimizer.
+    """
+    return [
+        {
+            "section": "3/16 in hairpin retaining clips",
+            "grade": "Zinc plated steel",
+            "quantity": 2,
+            "unit_size": "each",
+            "unit_weight": 0.15,
+            "notes": "One at each end of hinge pin P1; fits the cross-drilled retaining holes.",
+            "related_piece_marks": ["P1"],
+        },
+        {
+            "section": "3/4 in flat washers",
+            "grade": "Zinc plated steel",
+            "quantity": 2,
+            "unit_size": "each",
+            "unit_weight": 0.10,
+            "notes": "One under each hairpin clip on hinge pin P1.",
+            "related_piece_marks": ["P1"],
+        },
+        {
+            "section": "5/8 in hitch pins with retaining clips",
+            "grade": "Grade 5 or Grade 8, zinc plated",
+            "quantity": 2,
+            "unit_size": "each",
+            "unit_weight": 0.90,
+            "notes": "One for each truck mounting tube S1-L and S1-R.",
+            "related_piece_marks": ["S1-L", "S1-R"],
+        },
+        {
+            "section": "1/2 in anchor shackle, 2 ton rated",
+            "grade": "Forged alloy steel",
+            "quantity": 1,
+            "unit_size": "each",
+            "unit_weight": 0.80,
+            "notes": "Connects the machine restraint at front tie-down bracket G4.",
+            "related_piece_marks": ["G4"],
+        },
+        {
+            "section": "6 in oval LED stop/turn/tail lamp assembly",
+            "grade": "DOT / SAE compliant",
+            "quantity": 2,
+            "unit_size": "each, with grommet and pigtail",
+            "unit_weight": 0.70,
+            "notes": "One complete lamp assembly for each rear light guard G2-L and G2-R.",
+            "related_piece_marks": ["G2-L", "G2-R"],
+        },
+        {
+            "section": "Grade 70 transport chain and load binder",
+            "grade": "Grade 70 matched rated set",
+            "quantity": 1,
+            "unit_size": "set",
+            "unit_weight": 12.0,
+            "notes": "Front machine restraint; select chain length during machine fit-up and buy chain and binder as one rated set.",
+            "related_piece_marks": ["G4"],
+        },
+    ]
+
+
 def apply_member_sections(members: List[Member]) -> None:
     """Stamp every member with its true outside cross-section."""
     for m in members:
@@ -1332,6 +1397,7 @@ def generate_fabrication_assembly(params: ProjectParameters) -> Dict[str, Any]:
         "provenance": get_project_provenance(params),
         "members": members,
         "plates": plates,
+        "hardware": bought_out_hardware(),
         "welds": welds,
         "holes": holes,
         "hinge": hg,
