@@ -8,6 +8,32 @@ The truck is finished and does not get modified. Nothing braces to the flatbed,
 the headache rack or anything else. The carrier mounts through those two sockets
 and that is it.
 
+## Live App
+
+**[Open Z-Spray Carrier](https://catnapelmer.github.io/Z-Spray-Carrier/)**
+
+The public app uses GitHub Pages for the React frontend and a free Render web
+service for the existing FastAPI calculation and shop-pack engine. Both use
+HTTPS. The Render free service can sleep after inactivity, so the first request
+may take about a minute to wake up; later requests are fast.
+
+Every push to `main` runs the backend tests, builds the production frontend, and
+deploys it through `.github/workflows/deploy-pages.yml`. Render follows the same
+branch and rebuilds the backend container from `Dockerfile` using `render.yaml`.
+
+[Deploy the backend to Render](https://render.com/deploy?repo=https://github.com/CatNapElmer/Z-Spray-Carrier)
+
+Production configuration:
+
+- `VITE_API_BASE_URL` selects the public backend at frontend build time. The
+  Pages workflow defaults to
+  `https://z-spray-carrier-api-catnapelmer.onrender.com`; set the repository
+  Actions variable with the same name if the Render URL differs.
+- `VITE_BASE_PATH` is set to `/Z-Spray-Carrier/` by the Pages workflow.
+- `CORS_ORIGINS` is set by `render.yaml` to the GitHub Pages origin. Multiple
+  origins can be supplied as a comma-separated list.
+- No credentials, API keys, or persistent storage are required.
+
 This is a tape-measure-and-welder job. The software exists to make it faster than
 Kentucky windage, not to turn it into a precision engineering exercise.
 
@@ -129,6 +155,27 @@ If Windows Script Host is blocked on your machine, use **Z-Spray Carrier.cmd**
 instead - same thing, but a console flashes for a moment.
 
 Backend on `http://localhost:8000`, frontend on `http://localhost:5173`.
+
+For command-line local development:
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\uvicorn main:app --reload --port 8000
+```
+
+In a second terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+The frontend deliberately falls back to `http://localhost:8000` when
+`VITE_API_BASE_URL` is not set, so the existing Windows launchers continue to
+work unchanged.
 
 Tests:
 

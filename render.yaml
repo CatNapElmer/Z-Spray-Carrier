@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: z-spray-carrier-api-catnapelmer
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://catnapelmer.github.io

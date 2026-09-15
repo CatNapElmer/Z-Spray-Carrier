@@ -3,6 +3,7 @@ import csv
 import zipfile
 import shutil
 import subprocess
+import threading
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,13 +20,22 @@ from optimizer import optimize_stock
 
 app = FastAPI(title="Z Spray Carrier Fabricator API", version="2.0.0")
 
+default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+configured_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=configured_origins or default_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+preview_generation_lock = threading.Lock()
 
 @app.get("/api/health")
 def health_check():
@@ -39,14 +49,26 @@ def drawing_preview(sheet_number: int):
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     image_path = os.path.join(project_root, "output", "sheet_renders", f"sheet_{sheet_number}.png")
     if not os.path.isfile(image_path):
-        raise HTTPException(status_code=404, detail="Generate the fabrication package to create drawing previews.")
-    return FileResponse(image_path, media_type="image/png")
+        with preview_generation_lock:
+            if not os.path.isfile(image_path):
+                params = ProjectParameters()
+                assembly = generate_fabrication_assembly(params)
+                stock_data = optimize_stock(assembly, params.available_stock_lengths, params.saw_kerf)
+                preview_pdf = os.path.join(project_root, "output", "default-shop-drawings.pdf")
+                os.makedirs(os.path.dirname(preview_pdf), exist_ok=True)
+                generate_shop_drawings(params, assembly, stock_data, preview_pdf)
+                refresh_sheet_renders(preview_pdf, project_root)
+    return FileResponse(
+        image_path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 def refresh_sheet_renders(pdf_path: str, project_root: str) -> None:
     """Refresh the nine PNG previews from the just-generated shop drawing PDF."""
     renderer = shutil.which("pdftoppm")
     if not renderer:
-        return
+        raise RuntimeError("pdftoppm is required to refresh shop drawing previews.")
     render_dir = os.path.join(project_root, "output", "sheet_renders")
     os.makedirs(render_dir, exist_ok=True)
     prefix = os.path.join(render_dir, "_latest_sheet")

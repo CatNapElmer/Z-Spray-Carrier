@@ -59,6 +59,25 @@ def test_api_health():
     assert r.status_code == 200
 
 
+def test_local_frontend_is_allowed_by_cors():
+    r = client.options(
+        "/api/geometry",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_drawing_previews_are_not_browser_cached():
+    r = client.get("/api/drawings/preview/1")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store, max-age=0"
+
+
 def test_api_seed_project():
     r = client.get("/api/project/seed")
     assert r.status_code == 200
@@ -73,6 +92,14 @@ def test_api_geometry_endpoint():
     body = r.json()
     assert len(body["bom"]) > 0
     assert body["total_carrier_weight"] > 0
+
+
+def test_api_optimizer_endpoint():
+    r = client.post("/api/optimizer", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stock_plan"]
+    assert body["purchase_list"]
 
 
 def test_geometry_checks_are_exposed_over_the_api():
